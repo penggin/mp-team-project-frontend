@@ -1,1 +1,0 @@
-# mp-team-project-frontend
