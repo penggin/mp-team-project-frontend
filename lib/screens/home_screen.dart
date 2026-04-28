@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'dart:math';
 import 'package:video_player/video_player.dart';
+import 'package:provider/provider.dart';
 import 'notification_screen.dart';
+import 'settings_screen.dart';// ThemeProvider import
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({Key? key}) : super(key: key);
@@ -26,9 +28,6 @@ class _HomeScreenState extends State<HomeScreen> {
   ];
 
   String _currentComment = "캐릭터를 클릭하면 멘트가 나와요!";
-
-  final Color cardBackgroundColor = const Color(0xFFE8F6F8);
-  final Color primaryTextColor = const Color(0xFF1E105C);
 
   late VideoPlayerController _videoController;
 
@@ -60,18 +59,21 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // ✅ 테마 색상 가져오기 (색상 바뀌면 자동으로 화면 다시 그림)
+    final colors = context.watch<ThemeProvider>().colors;
     return Scaffold(
       // 💡 껍데기(MainScreen)가 네비게이션 바를 가져갔으므로, 여기서는 AppBar와 본문(Body)만 그립니다.
+      backgroundColor: colors.background, // ✅ 배경색 테마 적용
       appBar: AppBar(
-        backgroundColor: Colors.white,
+        backgroundColor: colors.background, // ✅ 앱바 배경색 테마 적용
         elevation: 0,
         leading: IconButton(
-          icon: Icon(Icons.menu, color: primaryTextColor, size: 32),
-          onPressed: () {},
+            icon: Icon(Icons.menu, color: colors.primaryText, size: 32), // ✅
+            onPressed: () {},
         ),
         actions: [
           IconButton(
-            icon: Icon(Icons.notifications_none, color: primaryTextColor, size: 32),
+            icon: Icon(Icons.notifications_none, color: colors.primaryText, size: 32), // ✅
             onPressed: () {
               Navigator.push(
                 context,
@@ -93,17 +95,30 @@ class _HomeScreenState extends State<HomeScreen> {
               Container(
                 padding: const EdgeInsets.all(20),
                 decoration: BoxDecoration(
-                  color: cardBackgroundColor,
+                  color: colors.cardBackground, // ✅ 카드 배경색 테마 적용
                   borderRadius: BorderRadius.circular(20),
                 ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text('LV : $level', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: primaryTextColor)),
+                    Text(
+                      'LV : $level',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                        color: colors.primaryText, // ✅
+                      ),
+                    ),
                     const SizedBox(height: 10),
                     Row(
                       children: [
-                        Text('EXP', style: TextStyle(fontWeight: FontWeight.bold, color: primaryTextColor)),
+                        Text(
+                          'EXP',
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            color: colors.primaryText, // ✅
+                          ),
+                        ),
                         const SizedBox(width: 10),
                         Expanded(
                           child: ClipRRect(
@@ -112,7 +127,9 @@ class _HomeScreenState extends State<HomeScreen> {
                               value: expProgress,
                               minHeight: 12,
                               backgroundColor: Colors.grey.shade300,
-                              valueColor: AlwaysStoppedAnimation<Color>(primaryTextColor),
+                              valueColor: AlwaysStoppedAnimation<Color>(
+                                colors.primaryText, // ✅
+                              ),
                             ),
                           ),
                         ),
@@ -125,17 +142,35 @@ class _HomeScreenState extends State<HomeScreen> {
                         Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            const Text('오늘의 소비', style: TextStyle(color: Colors.black54)),
-                            Text('${todaySpend.toString().replaceAllMapped(RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (Match m) => '${m[1]},')}원',
-                                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: primaryTextColor)),
-                          ],
+                          Text(
+                          '오늘의 소비',
+                          style: TextStyle(color: colors.subText), // ✅
                         ),
+                        Text(
+                          '${todaySpend.toString().replaceAllMapped(RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (Match m) => '${m[1]},')}원',
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                            color: colors.primaryText, // ✅
+                          ),
+                        ),
+                      ],
+                    ),
                         Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            const Text('남은 잔액', style: TextStyle(color: Colors.black54)),
-                            Text('${remainingBalance.toString().replaceAllMapped(RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (Match m) => '${m[1]},')}원',
-                                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: primaryTextColor)),
+                            Text(
+                              '남은 잔액',
+                              style: TextStyle(color: colors.subText), // ✅
+                            ),
+                            Text(
+                              '${remainingBalance.toString().replaceAllMapped(RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (Match m) => '${m[1]},')}원',
+                              style: TextStyle(
+                                fontSize: 18,
+                                fontWeight: FontWeight.bold,
+                                color: colors.primaryText, // ✅
+                              ),
+                            ),
                           ],
                         ),
                       ],
@@ -151,7 +186,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   onTap: _generateRandomComment,
                   child: Container(
                     decoration: BoxDecoration(
-                      color: cardBackgroundColor,
+                      color: colors.cardBackground, // ✅
                       borderRadius: BorderRadius.circular(20),
                     ),
                     child: ClipRRect(
@@ -162,7 +197,9 @@ class _HomeScreenState extends State<HomeScreen> {
                           aspectRatio: _videoController.value.aspectRatio,
                           child: VideoPlayer(_videoController),
                         )
-                            : const CircularProgressIndicator(),
+                            : CircularProgressIndicator(
+                          color: colors.primaryText, // ✅
+                        ),
                       ),
                     ),
                   ),
@@ -174,14 +211,18 @@ class _HomeScreenState extends State<HomeScreen> {
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 30),
                 decoration: BoxDecoration(
-                  color: cardBackgroundColor,
+                  color: colors.cardBackground, // ✅
                   borderRadius: BorderRadius.circular(20),
                 ),
                 child: Center(
                   child: Text(
                     _currentComment,
                     textAlign: TextAlign.center,
-                    style: const TextStyle(fontSize: 16, color: Colors.black87, height: 1.5),
+                    style: TextStyle(
+                      fontSize: 16,
+                      color: colors.primaryText, // ✅
+                      height: 1.5,
+                    ),
                   ),
                 ),
               ),

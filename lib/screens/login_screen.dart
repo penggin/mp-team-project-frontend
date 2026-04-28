@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart'; // ✅ 추가
 import 'main_screen.dart'; // 로그인 완료 시 갈 곳
 import 'signup_screen.dart'; // 회원가입 누를 시 갈 곳
+import 'settings_screen.dart'; // ✅ 추가
 
 class LoginScreen extends StatefulWidget {
-  const LoginScreen({Key? key}) : super(key: key);
+  const LoginScreen({super.key}); // ✅ super.key로 변경
 
   @override
   State<LoginScreen> createState() => _LoginScreenState();
@@ -34,8 +36,9 @@ class _LoginScreenState extends State<LoginScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.watch<ThemeProvider>().colors;
     return Scaffold(
-      backgroundColor: Colors.white, // 전체 배경은 깔끔한 흰색
+      backgroundColor: colors.background, // ✅ 테마 배경색
       body: SafeArea(
         child: Center(
           child: SingleChildScrollView(
@@ -55,20 +58,27 @@ class _LoginScreenState extends State<LoginScreen> {
                 const SizedBox(height: 40),
 
                 // 2. ID 입력 영역
-                Text('ID', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: themeDarkBlue)),
+                Text(
+                  'ID',
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 16,
+                    color: colors.primaryText, // ✅ 테마 텍스트 색상
+                  ),
+                ),
                 const SizedBox(height: 8),
                 TextField(
                   controller: _idController,
                   decoration: InputDecoration(
                     filled: true,
-                    fillColor: Colors.white,
+                    fillColor: colors.cardBackground, // ✅ 테마 카드 배경색
                     enabledBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(15), // 피그마 시안처럼 둥글게
-                      borderSide: BorderSide(color: Colors.blue.shade200, width: 1.5), // 하늘색 테두리
+                      borderRadius: BorderRadius.circular(15),
+                      borderSide: BorderSide(color: colors.accent, width: 1.5), // ✅ 테마 포인트 색상
                     ),
                     focusedBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(15),
-                      borderSide: BorderSide(color: themeDarkBlue, width: 2), // 클릭 시 진한 파란색
+                      borderSide: BorderSide(color: colors.primaryText, width: 2), // ✅ 테마 텍스트 색상
                     ),
                     contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 15),
                   ),
@@ -76,21 +86,28 @@ class _LoginScreenState extends State<LoginScreen> {
                 const SizedBox(height: 20),
 
                 // 3. 비밀번호 입력 영역
-                Text('password', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: themeDarkBlue)),
+                Text(
+                  'password',
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 16,
+                    color: colors.primaryText, // ✅ 테마 텍스트 색상
+                  ),
+                ),
                 const SizedBox(height: 8),
                 TextField(
                   controller: _passwordController,
                   obscureText: true,
                   decoration: InputDecoration(
                     filled: true,
-                    fillColor: Colors.white,
+                    fillColor: colors.cardBackground, // ✅ 테마 카드 배경색
                     enabledBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(15),
-                      borderSide: BorderSide(color: Colors.blue.shade200, width: 1.5),
+                      borderSide: BorderSide(color: colors.accent, width: 1.5), // ✅ 테마 포인트 색상
                     ),
                     focusedBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(15),
-                      borderSide: BorderSide(color: themeDarkBlue, width: 2),
+                      borderSide: BorderSide(color: colors.primaryText, width: 2), // ✅ 테마 텍스트 색상
                     ),
                     contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 15),
                   ),
@@ -99,10 +116,10 @@ class _LoginScreenState extends State<LoginScreen> {
 
                 // 4. Log In 버튼
                 ElevatedButton(
-                  onPressed: _goToMainScreen, // 로그인 버튼에 화면 이동 연결
+                  onPressed: _goToMainScreen,
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: themeSkyBlue, // 하늘색 배경
-                    foregroundColor: themeDarkBlue, // 진한 파란색 글씨
+                    backgroundColor: colors.cardBackground, // ✅ 테마 카드 배경색
+                    foregroundColor: colors.primaryText,    // ✅ 테마 텍스트 색상
                     padding: const EdgeInsets.symmetric(vertical: 16),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(15),
@@ -122,8 +139,8 @@ class _LoginScreenState extends State<LoginScreen> {
                     );
                   },
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: themeSkyBlue,
-                    foregroundColor: themeDarkBlue,
+                    backgroundColor: colors.cardBackground, // ✅ 테마 카드 배경색
+                    foregroundColor: colors.primaryText,    // ✅ 테마 텍스트 색상
                     padding: const EdgeInsets.symmetric(vertical: 16),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(15),
@@ -134,18 +151,24 @@ class _LoginScreenState extends State<LoginScreen> {
                 ),
                 const SizedBox(height: 25),
 
-                // 6. 하단 링크 (비밀번호 찾기 | 아이디 찾기)
+                // 6. 하단 링크
                 Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
                     TextButton(
                       onPressed: () {},
-                      child: Text('비밀번호 찾기', style: TextStyle(color: Colors.grey.shade600, fontSize: 13)),
+                      child: Text(
+                        '비밀번호 찾기',
+                        style: TextStyle(color: colors.subText, fontSize: 13), // ✅ 테마 서브 텍스트
+                      ),
                     ),
-                    Text('|', style: TextStyle(color: Colors.grey.shade400, fontSize: 13)),
+                    Text('|', style: TextStyle(color: colors.subText, fontSize: 13)),
                     TextButton(
                       onPressed: () {},
-                      child: Text('아이디 찾기', style: TextStyle(color: Colors.grey.shade600, fontSize: 13)),
+                      child: Text(
+                        '아이디 찾기',
+                        style: TextStyle(color: colors.subText, fontSize: 13), // ✅ 테마 서브 텍스트
+                      ),
                     ),
                   ],
                 ),

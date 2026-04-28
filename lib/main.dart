@@ -1,8 +1,15 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import 'screens/login_screen.dart'; // 💡 처음 켜질 화면(Login)만 import 하면 됩니다!
+import 'screens/settings_screen.dart';
 
 void main() {
-  runApp(const MoneyTrackerApp());
+  runApp(
+    ChangeNotifierProvider(
+      create: (_) => ThemeProvider(),
+      child: const MoneyTrackerApp(),
+    ),
+  );
 }
 
 class MoneyTrackerApp extends StatelessWidget {

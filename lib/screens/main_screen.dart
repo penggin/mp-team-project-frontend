@@ -1,15 +1,16 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart'; // ✅ 추가
 import 'home_screen.dart';
 import 'statistics_screen.dart';
 import 'settings_screen.dart';
-import 'my_page_screen.dart';
+import 'category_payment_screen.dart';
 import 'ledger_screen.dart';
 
 // (나중에 가계부, 마이페이지 만들면 여기 추가)
 
 // --- 1. 전체 화면을 관리하는 껍데기 (네비게이션 바 전용) ---
 class MainScreen extends StatefulWidget {
-  const MainScreen({Key? key}) : super(key: key);
+  const MainScreen({super.key}); // ✅ super.key로 변경
 
   @override
   State<MainScreen> createState() => _MainScreenState();
@@ -25,7 +26,7 @@ class _MainScreenState extends State<MainScreen> {
     const LedgerScreen(),       // 1: 가계부
     const HomeScreen(),                         // 2: 홈 (기존 고래 화면)
     const StatisticsScreen(),                   // 3: 통계
-    const MyPageScreen(),     // 4: 마이페이지
+    const CategoryPaymentScreen(),     // 4: 마이페이지
   ];
 
   // 탭을 누르면 실행되는 함수
@@ -37,6 +38,7 @@ class _MainScreenState extends State<MainScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.watch<ThemeProvider>().colors;
     return Scaffold(
       // 💡 IndexedStack: 화면을 이동해도 영상이 꺼지지 않고 백그라운드에서 유지되게 해주는 마법의 위젯!
       body: IndexedStack(
@@ -45,7 +47,7 @@ class _MainScreenState extends State<MainScreen> {
       ),
       bottomNavigationBar: Container(
         decoration: BoxDecoration(
-          color: Colors.lightBlue.shade100,
+          color: colors.cardBackground, // ✅ 테마 적용 (하늘색 or 핑크)
         ),
         child: BottomNavigationBar(
           currentIndex: _selectedIndex, // 현재 선택된 탭 알려주기
@@ -53,8 +55,8 @@ class _MainScreenState extends State<MainScreen> {
           type: BottomNavigationBarType.fixed,
           backgroundColor: Colors.transparent,
           elevation: 0,
-          selectedItemColor: Colors.red.shade900,
-          unselectedItemColor: const Color(0xFF1E105C),
+          selectedItemColor: colors.accent,      // ✅ 테마 적용 (선택된 아이콘)
+          unselectedItemColor: colors.primaryText, // ✅ 테마 적용 (미선택 아이콘)
           showSelectedLabels: false,
           showUnselectedLabels: false,
           items: const [

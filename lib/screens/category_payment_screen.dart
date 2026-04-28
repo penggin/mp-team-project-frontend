@@ -2,9 +2,8 @@ import 'package:flutter/material.dart';
 import 'notification_screen.dart'; // 💡 알림 화면으로 넘어가기 위해 초대!
 
 // --- 마이페이지 (가계부 내역) 화면 ---
-class MyPageScreen extends StatelessWidget {
-  const MyPageScreen({Key? key}) : super(key: key);
-
+class CategoryPaymentScreen extends StatelessWidget {
+  const CategoryPaymentScreen({super.key});
   @override
   Widget build(BuildContext context) {
     // 앱 전체 공통 테마 색상
