@@ -2,8 +2,9 @@ import 'package:flutter/material.dart';
 import 'dart:math';
 import 'package:video_player/video_player.dart';
 import 'package:provider/provider.dart';
+import 'package:notification_listener_service/notification_listener_service.dart';
 import 'notification_screen.dart';
-import 'settings_screen.dart';// ThemeProvider import
+import 'settings_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({Key? key}) : super(key: key);
@@ -13,7 +14,6 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
-  // 상태 변수 (기존과 완벽하게 동일)
   int level = 5;
   double expProgress = 0.6;
   int todaySpend = 30700;
@@ -28,12 +28,12 @@ class _HomeScreenState extends State<HomeScreen> {
   ];
 
   String _currentComment = "캐릭터를 클릭하면 멘트가 나와요!";
-
   late VideoPlayerController _videoController;
 
   @override
   void initState() {
     super.initState();
+    _requestPermissions();
     _videoController = VideoPlayerController.asset('assets/killerwhale.mp4')
       ..initialize().then((_) {
         setState(() {});
@@ -41,6 +41,18 @@ class _HomeScreenState extends State<HomeScreen> {
         _videoController.setVolume(0.0);
         _videoController.play();
       });
+  }
+
+  Future<void> _requestPermissions() async {
+    try {
+      final granted = await NotificationListenerService.isPermissionGranted();
+      if (!granted) {
+        // 설정 화면으로 직접 이동
+        await NotificationListenerService.requestPermission();
+      }
+    } catch (e) {
+      print('권한 요청 에러: $e');
+    }
   }
 
   @override
@@ -59,21 +71,19 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   Widget build(BuildContext context) {
-    // ✅ 테마 색상 가져오기 (색상 바뀌면 자동으로 화면 다시 그림)
     final colors = context.watch<ThemeProvider>().colors;
     return Scaffold(
-      // 💡 껍데기(MainScreen)가 네비게이션 바를 가져갔으므로, 여기서는 AppBar와 본문(Body)만 그립니다.
-      backgroundColor: colors.background, // ✅ 배경색 테마 적용
+      backgroundColor: colors.background,
       appBar: AppBar(
-        backgroundColor: colors.background, // ✅ 앱바 배경색 테마 적용
+        backgroundColor: colors.background,
         elevation: 0,
         leading: IconButton(
-            icon: Icon(Icons.menu, color: colors.primaryText, size: 32), // ✅
-            onPressed: () {},
+          icon: Icon(Icons.menu, color: colors.primaryText, size: 32),
+          onPressed: () {},
         ),
         actions: [
           IconButton(
-            icon: Icon(Icons.notifications_none, color: colors.primaryText, size: 32), // ✅
+            icon: Icon(Icons.notifications_none, color: colors.primaryText, size: 32),
             onPressed: () {
               Navigator.push(
                 context,
@@ -90,12 +100,10 @@ class _HomeScreenState extends State<HomeScreen> {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               const SizedBox(height: 20),
-
-              // 1. 상태 카드
               Container(
                 padding: const EdgeInsets.all(20),
                 decoration: BoxDecoration(
-                  color: colors.cardBackground, // ✅ 카드 배경색 테마 적용
+                  color: colors.cardBackground,
                   borderRadius: BorderRadius.circular(20),
                 ),
                 child: Column(
@@ -106,7 +114,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       style: TextStyle(
                         fontSize: 18,
                         fontWeight: FontWeight.bold,
-                        color: colors.primaryText, // ✅
+                        color: colors.primaryText,
                       ),
                     ),
                     const SizedBox(height: 10),
@@ -116,7 +124,7 @@ class _HomeScreenState extends State<HomeScreen> {
                           'EXP',
                           style: TextStyle(
                             fontWeight: FontWeight.bold,
-                            color: colors.primaryText, // ✅
+                            color: colors.primaryText,
                           ),
                         ),
                         const SizedBox(width: 10),
@@ -128,7 +136,7 @@ class _HomeScreenState extends State<HomeScreen> {
                               minHeight: 12,
                               backgroundColor: Colors.grey.shade300,
                               valueColor: AlwaysStoppedAnimation<Color>(
-                                colors.primaryText, // ✅
+                                colors.primaryText,
                               ),
                             ),
                           ),
@@ -142,33 +150,27 @@ class _HomeScreenState extends State<HomeScreen> {
                         Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                          Text(
-                          '오늘의 소비',
-                          style: TextStyle(color: colors.subText), // ✅
+                            Text('오늘의 소비', style: TextStyle(color: colors.subText)),
+                            Text(
+                              '${todaySpend.toString().replaceAllMapped(RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (Match m) => '${m[1]},')}원',
+                              style: TextStyle(
+                                fontSize: 18,
+                                fontWeight: FontWeight.bold,
+                                color: colors.primaryText,
+                              ),
+                            ),
+                          ],
                         ),
-                        Text(
-                          '${todaySpend.toString().replaceAllMapped(RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (Match m) => '${m[1]},')}원',
-                          style: TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold,
-                            color: colors.primaryText, // ✅
-                          ),
-                        ),
-                      ],
-                    ),
                         Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text(
-                              '남은 잔액',
-                              style: TextStyle(color: colors.subText), // ✅
-                            ),
+                            Text('남은 잔액', style: TextStyle(color: colors.subText)),
                             Text(
                               '${remainingBalance.toString().replaceAllMapped(RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (Match m) => '${m[1]},')}원',
                               style: TextStyle(
                                 fontSize: 18,
                                 fontWeight: FontWeight.bold,
-                                color: colors.primaryText, // ✅
+                                color: colors.primaryText,
                               ),
                             ),
                           ],
@@ -179,14 +181,12 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
               ),
               const SizedBox(height: 20),
-
-              // 2. 캐릭터 영역
               Expanded(
                 child: GestureDetector(
                   onTap: _generateRandomComment,
                   child: Container(
                     decoration: BoxDecoration(
-                      color: colors.cardBackground, // ✅
+                      color: colors.cardBackground,
                       borderRadius: BorderRadius.circular(20),
                     ),
                     child: ClipRRect(
@@ -197,32 +197,24 @@ class _HomeScreenState extends State<HomeScreen> {
                           aspectRatio: _videoController.value.aspectRatio,
                           child: VideoPlayer(_videoController),
                         )
-                            : CircularProgressIndicator(
-                          color: colors.primaryText, // ✅
-                        ),
+                            : CircularProgressIndicator(color: colors.primaryText),
                       ),
                     ),
                   ),
                 ),
               ),
               const SizedBox(height: 20),
-
-              // 3. 대사 박스
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 30),
                 decoration: BoxDecoration(
-                  color: colors.cardBackground, // ✅
+                  color: colors.cardBackground,
                   borderRadius: BorderRadius.circular(20),
                 ),
                 child: Center(
                   child: Text(
                     _currentComment,
                     textAlign: TextAlign.center,
-                    style: TextStyle(
-                      fontSize: 16,
-                      color: colors.primaryText, // ✅
-                      height: 1.5,
-                    ),
+                    style: TextStyle(fontSize: 16, color: colors.primaryText, height: 1.5),
                   ),
                 ),
               ),

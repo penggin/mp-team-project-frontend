@@ -1,28 +1,15 @@
 import 'package:flutter/material.dart';
-import 'notification_screen.dart'; // 알림 화면 연동
+import 'notification_screen.dart';
 
-// --- 통계 화면 위젯 ---
+// --- 통계 대시보드 화면 위젯 ---
 class StatisticsScreen extends StatelessWidget {
   const StatisticsScreen({Key? key}) : super(key: key);
 
   @override
   Widget build(BuildContext context) {
+    // 앱 전체 공통 테마 색상
     final Color themeSkyBlue = const Color(0xFFE8F6F8);
     final Color themeDarkBlue = const Color(0xFF1E105C);
-
-    // 💡 10개의 통계용 더미 데이터
-    final List<Map<String, dynamic>> recentTransactions = [
-      {'title': '메가커피 가천대점', 'amount': '-2,000 원', 'color': Colors.red.shade400, 'icon': Icons.local_cafe},
-      {'title': '공유빈', 'amount': '+50,000 원', 'color': Colors.blue, 'icon': Icons.account_balance_wallet},
-      {'title': '호식당', 'amount': '-13,000 원', 'color': Colors.red.shade400, 'icon': Icons.restaurant},
-      {'title': '김현수', 'amount': '-24,000 원', 'color': Colors.red.shade400, 'icon': Icons.shopping_bag},
-      {'title': '스타벅스', 'amount': '-6,500 원', 'color': Colors.red.shade400, 'icon': Icons.local_cafe},
-      {'title': '쿠팡 결제', 'amount': '-32,000 원', 'color': Colors.red.shade400, 'icon': Icons.shopping_cart},
-      {'title': '편의점 입금', 'amount': '+5,000 원', 'color': Colors.blue, 'icon': Icons.account_balance_wallet},
-      {'title': '교보문고', 'amount': '-15,000 원', 'color': Colors.red.shade400, 'icon': Icons.menu_book},
-      {'title': '버스/지하철', 'amount': '-1,250 원', 'color': Colors.red.shade400, 'icon': Icons.directions_bus},
-      {'title': '용돈 입금', 'amount': '+100,000 원', 'color': Colors.blue, 'icon': Icons.savings},
-    ];
 
     return Scaffold(
       backgroundColor: Colors.white,
@@ -45,168 +32,247 @@ class StatisticsScreen extends StatelessWidget {
           ),
         ],
       ),
-      body: Column(
-        children: [
-          // ==========================================
-          // 1. 상단 고정 영역 (차트 및 요약)
-          // ==========================================
-          Padding(
-            padding: const EdgeInsets.all(20.0),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(20),
-                  decoration: BoxDecoration(
-                    color: themeSkyBlue,
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  child: Column(
+      // 💡 다양한 크기의 카드들이 들어가므로 스크롤 가능하게 설정
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.all(20.0),
+        physics: const BouncingScrollPhysics(),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            // 1. 도넛 차트 카드
+            _buildCardWrapper(
+              themeSkyBlue,
+              Column(
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      Column(
                         children: [
-                          const Column(
-                            children: [
-                              Icon(Icons.keyboard_arrow_up, color: Colors.black54),
-                              Text('3월', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Color(0xFF1E105C))),
-                              Icon(Icons.keyboard_arrow_down, color: Colors.black54),
-                            ],
-                          ),
-                          SizedBox(
-                            width: 130,
-                            height: 130,
-                            child: CustomPaint(
-                              painter: DonutChartPainter(),
-                            ),
-                          ),
+                          Icon(Icons.keyboard_arrow_up, color: themeDarkBlue),
+                          Text('3월', style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: themeDarkBlue)),
+                          Icon(Icons.keyboard_arrow_down, color: themeDarkBlue),
                         ],
                       ),
-                      const SizedBox(height: 20),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Text('수입', style: TextStyle(fontSize: 16, color: themeDarkBlue, fontWeight: FontWeight.bold)),
-                          const Text('630,000 원', style: TextStyle(fontSize: 18, color: Colors.blue, fontWeight: FontWeight.bold)),
-                        ],
-                      ),
-                      const SizedBox(height: 10),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Text('지출', style: TextStyle(fontSize: 16, color: themeDarkBlue, fontWeight: FontWeight.bold)),
-                          Text('300,300 원', style: TextStyle(fontSize: 18, color: Colors.red.shade400, fontWeight: FontWeight.bold)),
-                        ],
+                      SizedBox(
+                        width: 150,
+                        height: 150,
+                        child: CustomPaint(painter: DonutChartPainter()),
                       ),
                     ],
                   ),
-                ),
-                const SizedBox(height: 25),
-                // 최근 내역 헤더
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text('최근내역', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: themeDarkBlue)),
-                    Row(
-                      children: [
-                        _buildTextButton(Icons.calendar_today, '달력 보기', themeSkyBlue, themeDarkBlue),
-                        const SizedBox(width: 10),
-                        _buildTextButton(Icons.list_alt, '전체 보기', themeSkyBlue, themeDarkBlue),
-                      ],
+                  const SizedBox(height: 25),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text('수입', style: TextStyle(fontSize: 16, color: themeDarkBlue, fontWeight: FontWeight.bold)),
+                      const Text('630,000 원', style: TextStyle(fontSize: 18, color: Colors.blue, fontWeight: FontWeight.bold)),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text('지출', style: TextStyle(fontSize: 16, color: themeDarkBlue, fontWeight: FontWeight.bold)),
+                      Text('300,300 원', style: TextStyle(fontSize: 18, color: Colors.redAccent, fontWeight: FontWeight.bold)),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 20),
+
+            // 2. 꺾은선 차트 카드 (지난달 비교)
+            _buildCardWrapper(
+              themeSkyBlue,
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Icon(Icons.chevron_left, color: themeDarkBlue),
+                      Text(' 3월 ', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: themeDarkBlue)),
+                      Icon(Icons.chevron_right, color: themeDarkBlue),
+                    ],
+                  ),
+                  const SizedBox(height: 20),
+                  // 💡 꺾은선 그래프 영역
+                  Container(
+                    height: 150,
+                    width: double.infinity,
+                    decoration: BoxDecoration(
+                      border: Border(left: BorderSide(color: Colors.grey.shade300), bottom: BorderSide(color: Colors.grey.shade300)),
                     ),
-                  ],
-                ),
-              ],
+                    child: CustomPaint(painter: LineChartPainter()),
+                  ),
+                  const SizedBox(height: 10),
+                  // 범례
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    children: [
+                      _buildLegendItem('2월', Colors.grey.shade400),
+                      const SizedBox(width: 10),
+                      _buildLegendItem('3월', themeDarkBlue.withOpacity(0.2)),
+                    ],
+                  ),
+                  const SizedBox(height: 15),
+                  Text('지난달보다 7만원 절약했어요!', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: themeDarkBlue)),
+                ],
+              ),
             ),
-          ),
+            const SizedBox(height: 20),
 
-          // ==========================================
-          // 2. 하단 스크롤 영역 (최근 내역 리스트)
-          // ==========================================
-          Expanded(
-            child: ListView.builder(
-              padding: const EdgeInsets.symmetric(horizontal: 20.0),
-              physics: const BouncingScrollPhysics(), // 부드러운 스크롤 효과
-              itemCount: recentTransactions.length,
-              itemBuilder: (context, index) {
-                final tx = recentTransactions[index];
-                return _buildTransactionItem(
-                    tx['icon'],
-                    tx['title'],
-                    tx['amount'],
-                    tx['color'],
-                    themeSkyBlue,
-                    themeDarkBlue
-                );
-              },
+            // 3. 가로 막대 차트 카드 (이번달 요약)
+            _buildCardWrapper(
+              themeSkyBlue,
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('578,450원', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: themeDarkBlue)),
+                  const SizedBox(height: 15),
+                  _buildStackedBar(),
+                  const SizedBox(height: 15),
+                  Text('이번달은 이체에서 많은 돈이 사용됐어요!', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: themeDarkBlue)),
+                ],
+              ),
             ),
-          ),
-        ],
+            const SizedBox(height: 20),
+
+            // 4. 세로 막대 차트 카드 (또래 비교)
+            _buildCardWrapper(
+              themeSkyBlue,
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Icon(Icons.person_outline, color: themeDarkBlue, size: 28),
+                      const SizedBox(width: 8),
+                      Text('또래보다', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: themeDarkBlue)),
+                    ],
+                  ),
+                  const SizedBox(height: 5),
+                  Text('20만원 더 적게 사용했어요!', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: themeDarkBlue)),
+                  const SizedBox(height: 30),
+                  // 세로 막대 그래프
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      _buildVerticalBar('또래', 120, Colors.grey.shade400),
+                      const SizedBox(width: 30),
+                      _buildVerticalBar('나', 80, themeDarkBlue),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 20),
+
+            // 5. 하단 요약 카드 (또래 비교 2)
+            _buildCardWrapper(
+              themeSkyBlue,
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('내 또래는 여기에서 많은 금액을 썼어요!', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: themeDarkBlue)),
+                  const SizedBox(height: 15),
+                  _buildStackedBar(),
+                  const SizedBox(height: 15),
+                  Text('식비에 많은 금액을 평균 30만원을 썼어요', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: themeDarkBlue)),
+                ],
+              ),
+            ),
+            const SizedBox(height: 40),
+          ],
+        ),
       ),
     );
   }
 
-  Widget _buildTextButton(IconData icon, String text, Color bgColor, Color textColor) {
+  // --- 헬퍼 함수들 ---
+
+  // 카드 모양을 만들어주는 공통 래퍼
+  Widget _buildCardWrapper(Color bgColor, Widget child) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      padding: const EdgeInsets.all(25),
       decoration: BoxDecoration(
         color: bgColor,
-        borderRadius: BorderRadius.circular(10),
+        borderRadius: BorderRadius.circular(20),
       ),
-      child: Row(
-        children: [
-          Icon(icon, size: 14, color: textColor),
-          const SizedBox(width: 5),
-          Text(text, style: TextStyle(fontSize: 12, color: textColor, fontWeight: FontWeight.bold)),
-        ],
+      child: child,
+    );
+  }
+
+  // 가로 누적 막대 그래프 생성기
+  Widget _buildStackedBar() {
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(10),
+      child: SizedBox(
+        height: 30,
+        child: Row(
+          children: [
+            Expanded(flex: 40, child: Container(color: const Color(0xFF1E105C))),
+            Expanded(flex: 20, child: Container(color: Colors.grey.shade400)),
+            Expanded(flex: 15, child: Container(color: Colors.blue.shade400)),
+            Expanded(flex: 15, child: Container(color: Colors.redAccent.shade200)),
+            Expanded(flex: 10, child: Container(color: Colors.green.shade300)),
+          ],
+        ),
       ),
     );
   }
 
-  Widget _buildTransactionItem(IconData icon, String title, String amount, Color amountColor, Color bgColor, Color textColor) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.all(15),
-      decoration: BoxDecoration(
-        color: bgColor,
-        borderRadius: BorderRadius.circular(15),
-      ),
-      child: Row(
-        children: [
-          Container(
-            padding: const EdgeInsets.all(8),
-            decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle),
-            child: Icon(icon, color: textColor, size: 20),
-          ),
-          const SizedBox(width: 15),
-          Expanded(child: Text(title, style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: textColor))),
-          Text(amount, style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: amountColor)),
-        ],
-      ),
+  // 세로 막대 그래프 생성기
+  Widget _buildVerticalBar(String label, double height, Color color) {
+    return Column(
+      children: [
+        Container(
+          width: 35,
+          height: height,
+          color: color,
+        ),
+        const SizedBox(height: 10),
+        Text(label, style: const TextStyle(fontWeight: FontWeight.bold)),
+      ],
+    );
+  }
+
+  // 범례(Legend) 아이템 생성기
+  Widget _buildLegendItem(String label, Color color) {
+    return Row(
+      children: [
+        Container(width: 25, height: 10, color: color),
+        const SizedBox(width: 5),
+        Text(label, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+      ],
     );
   }
 }
 
-// --- 도넛 차트 페인터 (동일) ---
+// ==========================================
+// 🎨 도넛 차트를 그리는 페인터 (기존 유지 + 비율 조정)
+// ==========================================
 class DonutChartPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     final center = Offset(size.width / 2, size.height / 2);
     final radius = size.width / 2;
-    const strokeWidth = 25.0;
+    const strokeWidth = 35.0; // 시안처럼 두껍게
 
     final paint = Paint()
       ..style = PaintingStyle.stroke
       ..strokeWidth = strokeWidth;
 
     final sections = [
-      {'value': 50.0, 'color': const Color(0xFF1E105C)},
-      {'value': 15.0, 'color': Colors.blue.shade300},
-      {'value': 20.0, 'color': Colors.blue.shade100},
-      {'value': 15.0, 'color': Colors.grey.shade300},
+      {'value': 50.0, 'color': Colors.blue}, // 50%
+      {'value': 10.0, 'color': Colors.cyanAccent.shade400}, // 7%
+      {'value': 15.0, 'color': Colors.red.shade100}, // 10%
+      {'value': 15.0, 'color': Colors.grey.shade100}, // 20%
+      {'value': 10.0, 'color': Colors.grey.shade300}, // 13%
     ];
 
-    double startAngle = -1.5708;
+    double startAngle = -1.5708; // 12시 방향
     for (var section in sections) {
       final sweepAngle = (section['value'] as double) / 100 * 6.2832;
       paint.color = section['color'] as Color;
@@ -219,6 +285,66 @@ class DonutChartPainter extends CustomPainter {
       );
       startAngle += sweepAngle;
     }
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+}
+
+// ==========================================
+// 📈 꺾은선 차트를 그리는 페인터 (2월, 3월 비교)
+// ==========================================
+class LineChartPainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    final w = size.width;
+    final h = size.height;
+
+    // 1. 2월 데이터 (회색)
+    final path1 = Path();
+    path1.moveTo(0, h * 0.8);
+    path1.lineTo(w * 0.3, h * 0.7);
+    path1.lineTo(w * 0.6, h * 0.4);
+    path1.lineTo(w, h * 0.2);
+    path1.lineTo(w, h);
+    path1.lineTo(0, h);
+    path1.close();
+
+    // 2. 3월 데이터 (파란색)
+    final path2 = Path();
+    path2.moveTo(0, h * 0.9);
+    path2.lineTo(w * 0.4, h * 0.6);
+    path2.lineTo(w * 0.7, h * 0.3);
+    path2.lineTo(w, h * 0.05);
+    path2.lineTo(w, h);
+    path2.lineTo(0, h);
+    path2.close();
+
+    // 칠하기
+    final paint1 = Paint()..color = Colors.grey.shade200 ..style = PaintingStyle.fill;
+    final paint2 = Paint()..color = const Color(0xFF1E105C).withOpacity(0.08) ..style = PaintingStyle.fill;
+
+    // 테두리 선
+    final strokePaint1 = Paint()..color = Colors.grey.shade400 ..style = PaintingStyle.stroke ..strokeWidth = 2;
+    final strokePaint2 = Paint()..color = Colors.blue.shade300 ..style = PaintingStyle.stroke ..strokeWidth = 2;
+
+    canvas.drawPath(path1, paint1);
+    canvas.drawPath(path2, paint2);
+
+    // 윗부분 선만 따로 그리기 (밑면 제외)
+    final strokePath1 = Path()
+      ..moveTo(0, h * 0.8)
+      ..lineTo(w * 0.3, h * 0.7)
+      ..lineTo(w * 0.6, h * 0.4)
+      ..lineTo(w, h * 0.2);
+    canvas.drawPath(strokePath1, strokePaint1);
+
+    final strokePath2 = Path()
+      ..moveTo(0, h * 0.9)
+      ..lineTo(w * 0.4, h * 0.6)
+      ..lineTo(w * 0.7, h * 0.3)
+      ..lineTo(w, h * 0.05);
+    canvas.drawPath(strokePath2, strokePaint2);
   }
 
   @override
