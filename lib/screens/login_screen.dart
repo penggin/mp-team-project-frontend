@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart'; // ✅ 추가
 import 'main_screen.dart'; // 로그인 완료 시 갈 곳
 import 'signup_screen.dart'; // 회원가입 누를 시 갈 곳
-import 'settings_screen.dart'; // ✅ 추가
+import '../app_colors.dart'; // ✅ 추가
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key}); // ✅ super.key로 변경
@@ -36,7 +36,9 @@ class _LoginScreenState extends State<LoginScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final colors = context.watch<ThemeProvider>().colors;
+    return Consumer<ThemeProvider>(
+        builder: (context, themeProvider, child) {
+          final colors = themeProvider.colors;
     return Scaffold(
       backgroundColor: colors.background, // ✅ 테마 배경색
       body: SafeArea(
@@ -178,6 +180,8 @@ class _LoginScreenState extends State<LoginScreen> {
         ),
       ),
     );
-  }
-}
+        },        // ✅ Consumer builder 닫힘
+    );          // ✅ Consumer 닫힘
+  }             // ✅ build 함수 닫힘
+}               // ✅ _LoginScreenState 클래스 닫힘
 

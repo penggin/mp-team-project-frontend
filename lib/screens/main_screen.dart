@@ -5,6 +5,7 @@ import 'statistics_screen.dart';
 import 'settings_screen.dart';
 import 'category_payment_screen.dart';
 import 'ledger_screen.dart';
+import '../app_colors.dart';
 
 // (나중에 가계부, 마이페이지 만들면 여기 추가)
 

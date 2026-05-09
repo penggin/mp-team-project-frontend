@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
-import 'notification_screen.dart'; // 💡 알림 화면으로 넘어가기 위해 초대!
+import 'package:provider/provider.dart'; // ✅ 추가
+import 'notification_screen.dart';// 💡 알림 화면으로 넘어가기 위해 초대!
+import '../app_colors.dart';
 
 // --- 마이페이지 (가계부 내역) 화면 ---
 class CategoryPaymentScreen extends StatelessWidget {
@@ -7,21 +9,20 @@ class CategoryPaymentScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     // 앱 전체 공통 테마 색상
-    final Color themeSkyBlue = const Color(0xFFE8F6F8);
-    final Color themeDarkBlue = const Color(0xFF1E105C);
+    final colors = context.watch<ThemeProvider>().colors;
 
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: colors.background,
       appBar: AppBar(
-        backgroundColor: Colors.white,
+        backgroundColor: colors.background,
         elevation: 0,
         leading: IconButton(
-          icon: Icon(Icons.menu, color: themeDarkBlue, size: 32),
+          icon: Icon(Icons.menu, color: colors.primaryText, size: 32),
           onPressed: () {},
         ),
         actions: [
           IconButton(
-            icon: Icon(Icons.notifications_none, color: themeDarkBlue, size: 32),
+            icon: Icon(Icons.notifications_none, color: colors.primaryText, size: 32),
             onPressed: () {
               // 알림 화면 연동
               Navigator.push(
@@ -43,7 +44,7 @@ class CategoryPaymentScreen extends StatelessWidget {
             Container(
               padding: const EdgeInsets.all(25),
               decoration: BoxDecoration(
-                color: themeSkyBlue, // 하늘색 배경
+                color: colors.background, // 하늘색 배경
                 borderRadius: BorderRadius.circular(20),
               ),
               child: Column(
@@ -52,16 +53,16 @@ class CategoryPaymentScreen extends StatelessWidget {
                   // 월 선택
                   Row(
                     children: [
-                      Icon(Icons.chevron_left, color: themeDarkBlue),
+                      Icon(Icons.chevron_left, color: colors.primaryText  ),
                       const SizedBox(width: 5),
-                      Text('3월', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: themeDarkBlue)),
+                      Text('3월', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: colors.primaryText)),
                       const SizedBox(width: 5),
-                      Icon(Icons.chevron_right, color: themeDarkBlue),
+                      Icon(Icons.chevron_right, color: colors.primaryText),
                     ],
                   ),
                   const SizedBox(height: 15),
                   // 총액
-                  Text('578,450원', style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: themeDarkBlue)),
+                  Text('578,450원', style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: colors.primaryText)),
                   const SizedBox(height: 25),
                   // 💡 누적 막대그래프 (비율에 맞춰서 너비가 결정됩니다)
                   ClipRRect(
@@ -86,13 +87,13 @@ class CategoryPaymentScreen extends StatelessWidget {
             const SizedBox(height: 25),
 
             // 2. 카테고리별 리스트 내역
-            _buildCategoryItem('이체', '350,000 원', Colors.indigo.shade300, themeSkyBlue, themeDarkBlue),
-            _buildCategoryItem('카테고리 없음', '158,000 원', Colors.grey.shade300, themeSkyBlue, themeDarkBlue),
-            _buildCategoryItem('식비', '84,000 원', Colors.yellow.shade600, themeSkyBlue, themeDarkBlue),
-            _buildCategoryItem('쇼핑, 여가', '47,000 원', Colors.red.shade400, themeSkyBlue, themeDarkBlue),
-            _buildCategoryItem('여행, 숙박', '33,000 원', Colors.green.shade300, themeSkyBlue, themeDarkBlue),
-            _buildCategoryItem('카페', '5,000 원', Colors.brown.shade300, themeSkyBlue, themeDarkBlue),
-            _buildCategoryItem('편의점, 마트, 잡화', '2,000 원', Colors.grey.shade500, themeSkyBlue, themeDarkBlue),
+            _buildCategoryItem('이체', '350,000 원', Colors.indigo.shade300, colors),
+            _buildCategoryItem('카테고리 없음', '158,000 원', Colors.grey.shade300, colors),
+            _buildCategoryItem('식비', '84,000 원', Colors.yellow.shade600, colors),
+            _buildCategoryItem('쇼핑, 여가', '47,000 원', Colors.red.shade400, colors),
+            _buildCategoryItem('여행, 숙박', '33,000 원', Colors.green.shade300, colors),
+            _buildCategoryItem('카페', '5,000 원', Colors.brown.shade300, colors),
+            _buildCategoryItem('편의점, 마트, 잡화', '2,000 원', Colors.grey.shade500, colors),
 
             const SizedBox(height: 80), // 떠 있는 버튼(FAB)을 가리지 않게 아래 여백 추가
           ],
@@ -107,29 +108,45 @@ class CategoryPaymentScreen extends StatelessWidget {
         backgroundColor: Colors.white,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(50),
-          side: BorderSide(color: themeSkyBlue, width: 2), // 하늘색 테두리
+          side: BorderSide(color: colors.background, width: 2), // 하늘색 테두리
         ),
         elevation: 2,
-        child: Icon(Icons.add, color: themeDarkBlue, size: 30),
+        child: Icon(Icons.add, color: colors.accent, size: 30),
       ),
     );
   }
 
   // 반복되는 리스트 아이템을 그려주는 헬퍼 함수
-  Widget _buildCategoryItem(String title, String amount, Color indicatorColor, Color bgColor, Color textColor) {
+  Widget _buildCategoryItem(String title, String amount, Color indicatorColor, ThemeColors colors) {
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: bgColor, // 연한 하늘색 배경
+        color: colors.cardBackground, // ✅
         borderRadius: BorderRadius.circular(15),
       ),
       child: Row(
         children: [
-          CircleAvatar(radius: 12, backgroundColor: indicatorColor), // 카테고리 색상 동그라미
+          CircleAvatar(radius: 12, backgroundColor: indicatorColor),
           const SizedBox(width: 15),
-          Expanded(child: Text(title, style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: textColor))),
-          Text(amount, style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: textColor)),
+          Expanded(
+            child: Text(
+              title,
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+                color: colors.primaryText, // ✅
+              ),
+            ),
+          ),
+          Text(
+            amount,
+            style: TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.bold,
+              color: colors.primaryText, // ✅
+            ),
+          ),
         ],
       ),
     );

@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
-import 'screens/login_screen.dart';
+import 'screens/login_screen.dart'; // 💡 처음 켜질 화면(Login)만 import 하면 됩니다!
 import 'screens/settings_screen.dart';
+import 'app_colors.dart';
 
 void main() async {
   // ⚠️ FlutterForegroundTask 초기화 전에 반드시 필요

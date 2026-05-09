@@ -4,7 +4,7 @@ import 'package:video_player/video_player.dart';
 import 'package:provider/provider.dart';
 import 'package:notification_listener_service/notification_listener_service.dart';
 import 'notification_screen.dart';
-import 'settings_screen.dart';
+import 'package:first/app_colors.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({Key? key}) : super(key: key);
@@ -36,6 +36,7 @@ class _HomeScreenState extends State<HomeScreen> {
     _requestPermissions();
     _videoController = VideoPlayerController.asset('assets/killerwhale.mp4')
       ..initialize().then((_) {
+        if (!mounted) return;
         setState(() {});
         _videoController.setLooping(true);
         _videoController.setVolume(0.0);
@@ -54,7 +55,6 @@ class _HomeScreenState extends State<HomeScreen> {
       print('권한 요청 에러: $e');
     }
   }
-
   @override
   void dispose() {
     _videoController.dispose();
@@ -78,8 +78,8 @@ class _HomeScreenState extends State<HomeScreen> {
         backgroundColor: colors.background,
         elevation: 0,
         leading: IconButton(
-          icon: Icon(Icons.menu, color: colors.primaryText, size: 32),
-          onPressed: () {},
+            icon: Icon(Icons.menu, color: colors.primaryText, size: 32),
+            onPressed: () {},
         ),
         actions: [
           IconButton(
@@ -100,6 +100,7 @@ class _HomeScreenState extends State<HomeScreen> {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               const SizedBox(height: 20),
+
               Container(
                 padding: const EdgeInsets.all(20),
                 decoration: BoxDecoration(
@@ -150,21 +151,24 @@ class _HomeScreenState extends State<HomeScreen> {
                         Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text('오늘의 소비', style: TextStyle(color: colors.subText)),
-                            Text(
-                              '${todaySpend.toString().replaceAllMapped(RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (Match m) => '${m[1]},')}원',
-                              style: TextStyle(
-                                fontSize: 18,
-                                fontWeight: FontWeight.bold,
-                                color: colors.primaryText,
-                              ),
-                            ),
-                          ],
+                        Text('오늘의 소비', style: TextStyle(color: colors.subText)),
+                        Text(
+                          '${todaySpend.toString().replaceAllMapped(RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (Match m) => '${m[1]},')}원',
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                            color: colors.primaryText,
+                          ),
                         ),
+                      ],
+                    ),
                         Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text('남은 잔액', style: TextStyle(color: colors.subText)),
+                            Text(
+                              '남은 잔액',
+                              style: TextStyle(color: colors.subText),
+                            ),
                             Text(
                               '${remainingBalance.toString().replaceAllMapped(RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (Match m) => '${m[1]},')}원',
                               style: TextStyle(
@@ -181,6 +185,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
               ),
               const SizedBox(height: 20),
+
               Expanded(
                 child: GestureDetector(
                   onTap: _generateRandomComment,
@@ -198,12 +203,13 @@ class _HomeScreenState extends State<HomeScreen> {
                           child: VideoPlayer(_videoController),
                         )
                             : CircularProgressIndicator(color: colors.primaryText),
+                        ),
                       ),
                     ),
                   ),
                 ),
-              ),
               const SizedBox(height: 20),
+
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 30),
                 decoration: BoxDecoration(
@@ -218,7 +224,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   ),
                 ),
               ),
-              const SizedBox(height: 20),
+              const SizedBox(height: 20)
             ],
           ),
         ),

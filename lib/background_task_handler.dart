@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:notification_listener_service/notification_listener_service.dart';
 import 'package:flutter_sms_inbox/flutter_sms_inbox.dart';
@@ -11,10 +12,11 @@ void startCallback() {
 
 class PaymentTaskHandler extends TaskHandler {
   int _smsCheckCount = 0;
+  bool _listenerStarted = false;
 
   @override
   Future<void> onStart(DateTime timestamp, TaskStarter starter) async {
-    print('백그라운드 서비스 시작');
+    debugPrint('백그라운드 서비스 시작');
     await _initDB();
     await _startNotificationListener();
   }
@@ -23,7 +25,6 @@ class PaymentTaskHandler extends TaskHandler {
   Future<void> onRepeatEvent(DateTime timestamp) async {
     _smsCheckCount++;
 
-    // 15초 * 20 = 5분마다 SMS 체크
     if (_smsCheckCount >= 20) {
       await _checkNewSms();
       _smsCheckCount = 0;
@@ -32,10 +33,9 @@ class PaymentTaskHandler extends TaskHandler {
 
   @override
   Future<void> onDestroy(DateTime timestamp) async {
-    print('백그라운드 서비스 종료');
+    debugPrint('백그라운드 서비스 종료');
   }
 
-  // DB 초기화
   Future<void> _initDB() async {
     final db = await openDatabase(
       'payments.db',
@@ -54,24 +54,19 @@ class PaymentTaskHandler extends TaskHandler {
     await db.close();
   }
 
-  // 알림 리스너 시작
   Future<void> _startNotificationListener() async {
-    NotificationListenerService.notificationsStream.listen((event) {
+    if (_listenerStarted) return;
+    _listenerStarted = true;
 
-      // ── 필터링 버전 (실배포 시 아래 주석 해제) ──────────────────
-      // if (!_isPaymentApp(event.packageName)) return;
-      // ────────────────────────────────────────────────────────────
-
-      // 모든 알림 수신 (테스트용)
+    NotificationListenerService.notificationsStream.listen((event) async {
       final parsed = _parsePaymentMessage(event.content ?? '');
       if (parsed != null) {
-        _saveToLocalDB(parsed);
+        await _saveToLocalDB(parsed);
         FlutterForegroundTask.sendDataToMain(parsed);
       }
     });
   }
 
-  // SMS 체크
   Future<void> _checkNewSms() async {
     final prefs = await SharedPreferences.getInstance();
     final lastCheck = prefs.getInt('last_sms_check') ?? 0;
@@ -82,7 +77,7 @@ class PaymentTaskHandler extends TaskHandler {
       count: 20,
     );
 
-    for (var sms in messages) {
+    for (final sms in messages) {
       final smsTime = sms.date?.millisecondsSinceEpoch ?? 0;
       if (smsTime <= lastCheck) continue;
 
@@ -91,7 +86,7 @@ class PaymentTaskHandler extends TaskHandler {
 
       final parsed = _parsePaymentMessage(body);
       if (parsed != null) {
-        _saveToLocalDB(parsed);
+        await _saveToLocalDB(parsed);
         FlutterForegroundTask.sendDataToMain(parsed);
       }
     }
@@ -102,37 +97,12 @@ class PaymentTaskHandler extends TaskHandler {
     );
   }
 
-  // ── 결제 앱 필터 (실배포 시 사용) ───────────────────────────────
-  // bool _isPaymentApp(String? pkg) {
-  //   const apps = [
-  //     'com.kakao.talk',
-  //     'viva.republica.toss',
-  //     'com.nhn.android.naverpay',
-  //   ];
-  //   return apps.contains(pkg);
-  // }
-  // ────────────────────────────────────────────────────────────────
-
-  // 결제 SMS 필터
   bool _isPaymentSms(String text) {
     return text.contains('원 승인') ||
         text.contains('원 결제') ||
         text.contains('출금완료');
   }
 
-  // 메시지 파싱
-  // ── 필터링 버전 (실배포 시 아래로 교체) ─────────────────────────
-  // Map<String, dynamic>? _parsePaymentMessage(String text) {
-  //   if (text.isEmpty) return null;
-  //   if (!_isPaymentSms(text)) return null; // 결제 문자만 통과
-  //   return {
-  //     'content': text,
-  //     'category': '미분류',
-  //   };
-  // }
-  // ────────────────────────────────────────────────────────────────
-
-  // 모든 알림 통과 (테스트용)
   Map<String, dynamic>? _parsePaymentMessage(String text) {
     if (text.isEmpty) return null;
     return {
@@ -141,7 +111,6 @@ class PaymentTaskHandler extends TaskHandler {
     };
   }
 
-  // 로컬 DB에 저장
   Future<void> _saveToLocalDB(Map<String, dynamic> data) async {
     final db = await openDatabase('payments.db');
     await db.insert('payments', {

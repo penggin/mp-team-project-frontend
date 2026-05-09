@@ -1,18 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../app_colors.dart';
-class ThemeProvider extends ChangeNotifier {
-  AppThemeType _currentTheme = AppThemeType.sky; // 기본값: 하늘색
 
-  AppThemeType get currentTheme => _currentTheme;
-  ThemeColors get colors => AppColors.of(_currentTheme);
-
-  void setTheme(AppThemeType type) {
-    if (_currentTheme == type) return;
-    _currentTheme = type;
-    notifyListeners();
-  }
-}
 // --- 설정 화면 위젯 ---
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key}); // ✅ super.key로 변경
@@ -457,9 +446,9 @@ class _ThemeSettingsScreenState extends State<ThemeSettingsScreen> {
   @override
   void initState() {
     super.initState();
-    // ✅ sky: 0, pink: 1 로 매핑
     final currentTheme = context.read<ThemeProvider>().currentTheme;
-    selectedThemeIndex = currentTheme == AppThemeType.sky ? 0 : 1;
+    // ✅ AppColors 전역 함수로 인덱스 변환
+    selectedThemeIndex = AppColors.indexFromType(currentTheme);
   }
 
   @override
@@ -497,21 +486,32 @@ class _ThemeSettingsScreenState extends State<ThemeSettingsScreen> {
               ),
             ),
             const SizedBox(height: 30),
-            Row(
-              children: [
-                // ✅ 0: sky 테마, 1: pink 테마
-                _buildThemeOption(0, 'sky', colors),
-                const SizedBox(width: 20),
-                _buildThemeOption(1, 'pink', colors),
-              ],
+            Expanded(
+              child: Center(
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    ...AppThemeType.values.asMap().entries.map((entry) {
+                      final index = entry.key;
+                      final themeType = entry.value;
+                      return index != 0
+                          ? [
+                        const SizedBox(width: 20),
+                        _buildThemeOption(index, themeType, colors),
+                      ]
+                          : [
+                        _buildThemeOption(index, themeType, colors),
+                      ];
+                    }).expand((e) => e),
+                  ],
+                ),
+              ),
             ),
-            const Spacer(),
+            const SizedBox(height: 20),
             ElevatedButton(
               onPressed: () {
-                // ✅ 인덱스에 따라 올바른 테마 적용
-                final themeType = selectedThemeIndex == 0
-                    ? AppThemeType.sky
-                    : AppThemeType.pink;
+                final themeType = AppColors.typeFromIndex(selectedThemeIndex);
                 context.read<ThemeProvider>().setTheme(themeType);
                 Navigator.pop(context);
               },
@@ -535,18 +535,23 @@ class _ThemeSettingsScreenState extends State<ThemeSettingsScreen> {
     );
   }
 
-  Widget _buildThemeOption(int index, String label, ThemeColors colors) {
-    // ✅ 각 테마의 미리보기 색상 직접 지정
-    final previewColors = index == 0 ? AppColors.skyTheme : AppColors.pinkTheme;
+  Widget _buildThemeOption(int index, AppThemeType themeType, ThemeColors colors) {
+    // ✅ AppColors.of() 전역 함수로 미리보기 색상 가져오기
+    final previewColors = AppColors.of(themeType);
+    // ✅ AppColors.labelOf() 전역 함수로 테마 이름 가져오기
+    final label = AppColors.labelOf(themeType);
 
     return Expanded(
       child: GestureDetector(
         onTap: () => setState(() => selectedThemeIndex = index),
         child: Column(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Container(
               height: 200,
-              decoration: BoxDecoration(
+          width: double.infinity,
+          decoration: BoxDecoration(
                 border: Border.all(
                   color: selectedThemeIndex == index
                       ? colors.primaryText
@@ -554,7 +559,8 @@ class _ThemeSettingsScreenState extends State<ThemeSettingsScreen> {
                   width: 2,
                 ),
                 borderRadius: BorderRadius.circular(15),
-                color: previewColors.cardBackground, // ✅ 각 테마 미리보기 색상
+                // ✅ AppColors.of()로 가져온 미리보기 색상 사용
+                color: previewColors.cardBackground,
               ),
               child: Center(
                 child: Column(
@@ -562,14 +568,14 @@ class _ThemeSettingsScreenState extends State<ThemeSettingsScreen> {
                   children: [
                     Icon(
                       Icons.palette,
-                      color: previewColors.primaryText, // ✅ 각 테마 미리보기 색상
+                      color: previewColors.primaryText,
                       size: 40,
                     ),
                     const SizedBox(height: 8),
                     Text(
-                      label == 'sky' ? '하늘 테마' : '핑크 테마', // ✅ 테마 이름 표시
+                      label, // ✅ AppColors.labelOf()로 가져온 이름 사용
                       style: TextStyle(
-                        color: previewColors.primaryText, // ✅ 각 테마 미리보기 색상
+                        color: previewColors.primaryText,
                         fontWeight: FontWeight.bold,
                       ),
                     ),
@@ -578,11 +584,13 @@ class _ThemeSettingsScreenState extends State<ThemeSettingsScreen> {
               ),
             ),
             const SizedBox(height: 10),
-            Icon(
-              selectedThemeIndex == index
-                  ? Icons.check_circle
-                  : Icons.radio_button_unchecked,
-              color: colors.primaryText,
+        Center(
+          child: Icon(
+            selectedThemeIndex == index
+                ? Icons.check_circle
+                : Icons.radio_button_unchecked,
+            color: colors.primaryText,
+              ),
             ),
           ],
         ),
@@ -590,6 +598,7 @@ class _ThemeSettingsScreenState extends State<ThemeSettingsScreen> {
     );
   }
 }
+
 
 // --- 비밀번호 및 보안 화면 (Frame 6) ---
 class PasswordSecurityScreen extends StatelessWidget {
