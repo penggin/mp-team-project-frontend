@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
+import '../services/api_service.dart';
 
-// --- 회원가입 화면 위젯 ---
 class SignUpScreen extends StatefulWidget {
   const SignUpScreen({Key? key}) : super(key: key);
 
@@ -9,19 +9,84 @@ class SignUpScreen extends StatefulWidget {
 }
 
 class _SignUpScreenState extends State<SignUpScreen> {
-  // 앱 전체 테마 색상
   final Color themeSkyBlue = const Color(0xFFE8F6F8);
   final Color themeDarkBlue = const Color(0xFF1E105C);
 
-  // 💡 반복되는 텍스트 입력칸을 쉽게 만들기 위한 헬퍼 함수입니다.
-  Widget _buildInputField(String label, {bool isObscure = false}) {
+  final TextEditingController _emailController = TextEditingController();
+  final TextEditingController _passwordController = TextEditingController();
+  final TextEditingController _passwordCheckController = TextEditingController();
+  final TextEditingController _nicknameController = TextEditingController();
+
+  bool _isLoading = false;
+
+  @override
+  void dispose() {
+    _emailController.dispose();
+    _passwordController.dispose();
+    _passwordCheckController.dispose();
+    _nicknameController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _handleSignup() async {
+    final email = _emailController.text.trim();
+    final password = _passwordController.text.trim();
+    final passwordCheck = _passwordCheckController.text.trim();
+    final nickname = _nicknameController.text.trim();
+
+    if (email.isEmpty || password.isEmpty || nickname.isEmpty) {
+      _showSnackBar('모든 항목을 입력해주세요');
+      return;
+    }
+    if (password.length < 8) {
+      _showSnackBar('비밀번호는 8자 이상이어야 합니다');
+      return;
+    }
+    if (password != passwordCheck) {
+      _showSnackBar('비밀번호가 일치하지 않습니다');
+      return;
+    }
+
+    setState(() => _isLoading = true);
+    final result = await ApiService.signup(
+      email: email,
+      password: password,
+      nickname: nickname,
+    );
+    if (!mounted) return;
+    setState(() => _isLoading = false);
+
+    if (result['success'] == true) {
+      _showSnackBar('회원가입 성공!');
+      Navigator.pop(context);
+    } else {
+      _showSnackBar(result['message'] ?? '회원가입 실패');
+    }
+  }
+
+  void _showSnackBar(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message)),
+    );
+  }
+
+  Widget _buildInputField(
+      String label,
+      TextEditingController controller, {
+        bool isObscure = false,
+      }) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(label, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: themeDarkBlue)),
+        Text(label,
+            style: TextStyle(
+                fontWeight: FontWeight.bold,
+                fontSize: 16,
+                color: themeDarkBlue)),
         const SizedBox(height: 8),
         TextField(
-          obscureText: isObscure, // 비밀번호 가림 처리
+          controller: controller,
+          obscureText: isObscure,
           decoration: InputDecoration(
             filled: true,
             fillColor: Colors.white,
@@ -33,7 +98,8 @@ class _SignUpScreenState extends State<SignUpScreen> {
               borderRadius: BorderRadius.circular(15),
               borderSide: BorderSide(color: themeDarkBlue, width: 2),
             ),
-            contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 15),
+            contentPadding:
+            const EdgeInsets.symmetric(horizontal: 20, vertical: 15),
           ),
         ),
         const SizedBox(height: 20),
@@ -48,71 +114,30 @@ class _SignUpScreenState extends State<SignUpScreen> {
       appBar: AppBar(
         backgroundColor: Colors.white,
         elevation: 0,
-        iconTheme: IconThemeData(color: themeDarkBlue), // 뒤로가기 화살표 색상
-        title: Text('회원가입', style: TextStyle(color: themeDarkBlue, fontWeight: FontWeight.bold)),
+        iconTheme: IconThemeData(color: themeDarkBlue),
+        title: Text('회원가입',
+            style: TextStyle(
+                color: themeDarkBlue, fontWeight: FontWeight.bold)),
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(1.0),
-          child: Container(color: themeDarkBlue, height: 1.5), // 시안처럼 앱바 아래 진한 선 추가
+          child: Container(color: themeDarkBlue, height: 1.5),
         ),
       ),
       body: SafeArea(
-        child: SingleChildScrollView( // 키보드가 올라와도 화면이 스크롤되도록 설정
+        child: SingleChildScrollView(
           padding: const EdgeInsets.all(30.0),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              // 1. ID 입력 & 중복확인 버튼 영역
-              Text('ID', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: themeDarkBlue)),
-              const SizedBox(height: 8),
-              Row(
-                children: [
-                  Expanded(
-                    child: TextField(
-                      decoration: InputDecoration(
-                        filled: true,
-                        fillColor: Colors.white,
-                        enabledBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(15),
-                          borderSide: BorderSide(color: Colors.blue.shade200, width: 1.5),
-                        ),
-                        focusedBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(15),
-                          borderSide: BorderSide(color: themeDarkBlue, width: 2),
-                        ),
-                        contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 15),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-                  // 중복확인 버튼
-                  OutlinedButton(
-                    onPressed: () {},
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: themeDarkBlue,
-                      side: BorderSide(color: themeDarkBlue, width: 1.5), // 테두리 있는 버튼
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
-                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 15),
-                    ),
-                    child: const Text('중복확인', style: TextStyle(fontWeight: FontWeight.bold)),
-                  ),
-                ],
-              ),
+              _buildInputField('Email', _emailController),
+              _buildInputField('Password (8자 이상)', _passwordController,
+                  isObscure: true),
+              _buildInputField('Check Password', _passwordCheckController,
+                  isObscure: true),
+              _buildInputField('Nickname', _nicknameController),
               const SizedBox(height: 20),
-
-              // 2. 나머지 입력 필드들 (헬퍼 함수 사용)
-              _buildInputField('password', isObscure: true),
-              _buildInputField('check password', isObscure: true),
-              _buildInputField('name'),
-              _buildInputField('Email'),
-
-              const SizedBox(height: 20),
-
-              // 3. 완료(Sign In) 버튼
               ElevatedButton(
-                onPressed: () {
-                  // 💡 뒤로 가기 (회원가입 완료 후 다시 로그인 화면으로 돌아감)
-                  Navigator.pop(context);
-                },
+                onPressed: _isLoading ? null : _handleSignup,
                 style: ElevatedButton.styleFrom(
                   backgroundColor: themeSkyBlue,
                   foregroundColor: themeDarkBlue,
@@ -122,7 +147,11 @@ class _SignUpScreenState extends State<SignUpScreen> {
                   ),
                   elevation: 0,
                 ),
-                child: const Text('Sign In', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                child: _isLoading
+                    ? const CircularProgressIndicator()
+                    : const Text('Sign Up',
+                    style: TextStyle(
+                        fontWeight: FontWeight.bold, fontSize: 16)),
               ),
             ],
           ),

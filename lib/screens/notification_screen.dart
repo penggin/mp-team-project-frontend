@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
-import 'package:sqflite/sqflite.dart';
 import 'package:notification_listener_service/notification_listener_service.dart';
 import '../background_task_handler.dart';
+import '../services/api_service.dart';
 
 class AppNotification {
   final String content;
@@ -26,13 +26,13 @@ class _NotificationScreenState extends State<NotificationScreen> {
   final Color themeDarkBlue = const Color(0xFF1E105C);
 
   List<AppNotification> _notifications = [];
+  bool _isLoading = true;
 
   @override
   void initState() {
     super.initState();
     _startForegroundService();
-    _loadFromLocalDB();
-    _listenFromBackground();
+    _loadFromBackend();
     _listenNotificationsDirect();
   }
 
@@ -46,74 +46,66 @@ class _NotificationScreenState extends State<NotificationScreen> {
     );
   }
 
-  void _listenFromBackground() {
-    FlutterForegroundTask.addTaskDataCallback((data) {
-      if (data is Map<String, dynamic>) {
-        setState(() {
-          _notifications.insert(
-            0,
-            AppNotification(
-              content: (data['content'] ?? '') as String,
-              category: (data['category'] ?? '미분류') as String,
-            ),
-          );
-        });
-      }
-    });
-  }
+  // 백엔드에서 가계부 내역 불러오기
+  Future<void> _loadFromBackend() async {
+    final entries = await ApiService.getLedgerEntries();
 
-  // 알림을 직접 수신 (백그라운드 서비스 거치지 않음)
-  void _listenNotificationsDirect() {
-    NotificationListenerService.notificationsStream.listen((event) {
-      final content = event.content ?? '';
-      if (content.isEmpty) return;
-
-      setState(() {
-        _notifications.insert(
-          0,
-          AppNotification(
-            content: content,
-            category: '미분류',
-          ),
+    if (!mounted) return;
+    setState(() {
+      _notifications = entries.map((entry) {
+        return AppNotification(
+          content: entry['raw_text'] ??
+              '${entry['merchant_name'] ?? '미상'} ${entry['amount']}원',
+          category: entry['category'] ?? '미분류',
         );
-      });
+      }).toList();
+      _isLoading = false;
     });
   }
 
-  Future<void> _loadFromLocalDB() async {
-    try {
-      final db = await openDatabase(
-        'payments.db',
-        version: 1,
-        onCreate: (db, version) async {
-          await db.execute('''
-            CREATE TABLE IF NOT EXISTS payments (
-              id INTEGER PRIMARY KEY AUTOINCREMENT,
-              content TEXT,
-              category TEXT,
-              timestamp INTEGER
-            )
-          ''');
-        },
-      );
-      final rows = await db.query('payments', orderBy: 'timestamp DESC');
-      await db.close();
+  // 결제 알림 키워드 필터링
+  bool _isPaymentNotification(String content) {
+    const keywords = [
+      '승인', '결제', '출금', '입금', '이체', '취소', '카드',
+    ];
+    return keywords.any((keyword) => content.contains(keyword));
+  }
 
-      setState(() {
-        _notifications = rows.map((row) => AppNotification(
-          content: (row['content'] ?? '') as String,
-          category: (row['category'] ?? '미분류') as String,
-        )).toList();
-      });
-    } catch (e) {
-      print('DB 로드 에러: $e');
-    }
+  // 알림 직접 수신 + 백엔드 연동
+  void _listenNotificationsDirect() {
+    NotificationListenerService.notificationsStream.listen((event) async {
+      final title = event.title ?? '';
+      final body = event.content ?? '';
+      final fullText = '$title $body'.trim();
+
+      if (fullText.isEmpty) return;
+
+      print('알림 감지: $fullText');
+
+      if (!_isPaymentNotification(fullText)) {
+        print('  ↳ 결제 알림 아님, 무시');
+        return;
+      }
+
+      // 1. 서버에 파싱 요청
+      final parsed = await ApiService.parseTransaction(fullText);
+      if (parsed == null) return;
+
+      // 2. 가계부 저장
+      final saved = await ApiService.createLedgerEntry(parsed);
+      if (!saved) return;
+
+      // 3. 백엔드에서 다시 불러와서 화면 갱신
+      await _loadFromBackend();
+    });
   }
 
   IconData _getIconForCategory(String category) {
     switch (category) {
       case 'CAFE':
+      case 'cafe':
       case 'FOOD':
+      case 'food':
       case 'SHOPPING':
         return Icons.account_balance_wallet;
       case 'DEPOSIT':
@@ -140,8 +132,16 @@ class _NotificationScreenState extends State<NotificationScreen> {
           '알림',
           style: TextStyle(color: themeDarkBlue, fontWeight: FontWeight.bold),
         ),
+        actions: [
+          IconButton(
+            icon: Icon(Icons.refresh, color: themeDarkBlue),
+            onPressed: _loadFromBackend,
+          ),
+        ],
       ),
-      body: _notifications.isEmpty
+      body: _isLoading
+          ? Center(child: CircularProgressIndicator(color: themeDarkBlue))
+          : _notifications.isEmpty
           ? Center(
         child: Text(
           '감지된 결제 내역이 없습니다',
