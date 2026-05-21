@@ -4,14 +4,15 @@ import 'home_screen.dart';
 import 'statistics_screen.dart';
 import 'settings_screen.dart';
 import 'category_payment_screen.dart';
-import 'ledger_screen.dart';
+import 'main_payment_screen.dart';
 import '../app_colors.dart';
 
 // (나중에 가계부, 마이페이지 만들면 여기 추가)
 
 // --- 1. 전체 화면을 관리하는 껍데기 (네비게이션 바 전용) ---
 class MainScreen extends StatefulWidget {
-  const MainScreen({super.key}); // ✅ super.key로 변경
+  MainScreen({super.key}); // ✅ super.key로 변경
+  static final GlobalKey<_MainScreenState> globalKey = GlobalKey<_MainScreenState>();
 
   @override
   State<MainScreen> createState() => _MainScreenState();
@@ -21,10 +22,16 @@ class _MainScreenState extends State<MainScreen> {
   // 처음 앱을 켜면 '홈(고래)' 화면(인덱스 2)이 보이도록 설정
   int _selectedIndex = 2;
 
+  void changeTab(int index) {
+    setState(() {
+      _selectedIndex = index;
+    });
+  }
+
   // 하단 탭을 눌렀을 때 보여줄 알맹이 화면들 리스트
   final List<Widget> _screens = [
     const SettingsScreen(),                     // 💡 0: 이제 임시 텍스트 대신 진짜 설정 화면이 나옵니다!
-    const LedgerScreen(),       // 1: 가계부
+    const MainPaymentScreen(),       // 1: 가계부
     const HomeScreen(),                         // 2: 홈 (기존 고래 화면)
     const StatisticsScreen(),                   // 3: 통계
     const CategoryPaymentScreen(),     // 4: 마이페이지

@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import 'notification_screen.dart';
 import 'package:first/app_colors.dart';
 import 'package:first/services/api_service.dart'; // ✅ ApiService import
+import 'main_screen.dart';
 
 class LedgerScreen extends StatefulWidget {
   const LedgerScreen({Key? key}) : super(key: key);
@@ -481,6 +482,44 @@ class _LedgerScreenState extends State<LedgerScreen> {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+class LedgerScreenWrapper extends StatelessWidget {
+  const LedgerScreenWrapper({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.watch<ThemeProvider>().colors;
+
+    return Scaffold(
+      body: const LedgerScreen(),
+      bottomNavigationBar: Container(
+        decoration: BoxDecoration(
+          color: colors.cardBackground,
+        ),
+        child: BottomNavigationBar(
+          currentIndex: 1, // 달력 탭 강조
+          onTap: (index) {
+            Navigator.pop(context); // 뒤로가기
+            MainScreen.globalKey.currentState?.changeTab(index);
+          },
+          type: BottomNavigationBarType.fixed,
+          backgroundColor: Colors.transparent,
+          elevation: 0,
+          selectedItemColor: colors.accent,
+          unselectedItemColor: colors.primaryText,
+          showSelectedLabels: false,
+          showUnselectedLabels: false,
+          items: const [
+            BottomNavigationBarItem(icon: Icon(Icons.settings_outlined, size: 30), label: '설정'),
+            BottomNavigationBarItem(icon: Icon(Icons.list_outlined, size: 30), label: '가계부'),
+            BottomNavigationBarItem(icon: Icon(Icons.home_outlined, size: 30), label: '홈'),
+            BottomNavigationBarItem(icon: Icon(Icons.pie_chart_outline, size: 30), label: '통계'),
+            BottomNavigationBarItem(icon: Icon(Icons.menu_book_outlined, size: 30), label: '마이페이지'),
+          ],
+        ),
       ),
     );
   }

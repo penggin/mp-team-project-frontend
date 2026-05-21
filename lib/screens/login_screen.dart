@@ -44,7 +44,9 @@ class _LoginScreenState extends State<LoginScreen> {
     if (result['success'] == true) {
       Navigator.pushReplacement(
         context,
-        MaterialPageRoute(builder: (context) => const MainScreen()),
+        MaterialPageRoute(
+          builder: (context) => MainScreen(key: MainScreen.globalKey),
+        ),
       );
     } else {
       _showSnackBar(result['message'] ?? '로그인 실패');

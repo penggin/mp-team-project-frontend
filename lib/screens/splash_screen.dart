@@ -30,7 +30,7 @@ class _SplashScreenState extends State<SplashScreen> {
       // 토큰 있음 → 메인 화면으로 바로 이동
       Navigator.pushReplacement(
         context,
-        MaterialPageRoute(builder: (_) => const MainScreen()),
+        MaterialPageRoute(builder: (_) => MainScreen()),
       );
     } else {
       // 토큰 없음 → 로그인 화면으로
