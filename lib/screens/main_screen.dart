@@ -62,10 +62,10 @@ class _MainScreenState extends State<MainScreen> {
           showUnselectedLabels: false,
           items: const [
             BottomNavigationBarItem(icon: Icon(Icons.settings_outlined, size: 30), label: '설정'),
-            BottomNavigationBarItem(icon: Icon(Icons.menu_book_outlined, size: 30), label: '가계부'),
+            BottomNavigationBarItem(icon: Icon(Icons.list_outlined, size: 30), label: '가계부'),
             BottomNavigationBarItem(icon: Icon(Icons.home_outlined, size: 30), label: '홈'),
             BottomNavigationBarItem(icon: Icon(Icons.pie_chart_outline, size: 30), label: '통계'),
-            BottomNavigationBarItem(icon: Icon(Icons.person_outline, size: 30), label: '마이페이지'),
+            BottomNavigationBarItem(icon: Icon(Icons.menu_book_outlined, size: 30), label: '마이페이지'),
           ],
         ),
       ),
