@@ -152,4 +152,46 @@ class ApiService {
       return {'success': false, 'message': '서버 연결 실패: $e'};
     }
   }
+  // 저장된 토큰이 있는지 확인 (자동 로그인용)
+  static Future<bool> hasValidToken() async {
+    final token = await getAccessToken();
+    return token != null && token.isNotEmpty;
+  }
+
+// 로그아웃 - 저장된 토큰 모두 삭제
+  static Future<void> logout() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove('access_token');
+    await prefs.remove('refresh_token');
+  }
+
+// (선택) 토큰 갱신 - 백엔드에 /api/v1/auth/refresh 엔드포인트가 있을 때만 동작
+  static Future<bool> refreshAccessToken() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final refreshToken = prefs.getString('refresh_token');
+      if (refreshToken == null) return false;
+
+      final response = await http.post(
+        Uri.parse('$baseUrl/api/v1/auth/refresh'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({'refresh_token': refreshToken}),
+      );
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(utf8.decode(response.bodyBytes));
+        if (data['success'] == true) {
+          await saveTokens(
+            data['data']['access_token'],
+            data['data']['refresh_token'],
+          );
+          return true;
+        }
+      }
+      return false;
+    } catch (e) {
+      print('토큰 갱신 에러: $e');
+      return false;
+    }
+  }
 }

@@ -28,6 +28,8 @@ class _NotificationScreenState extends State<NotificationScreen> {
   List<AppNotification> _notifications = [];
   bool _isLoading = true;
 
+  final Set<String> _processedNotifications = {};
+
   @override
   void initState() {
     super.initState();
@@ -53,9 +55,14 @@ class _NotificationScreenState extends State<NotificationScreen> {
     if (!mounted) return;
     setState(() {
       _notifications = entries.map((entry) {
+        final merchant = entry['merchant_name'] ?? '알 수 없음';
+        final amount = entry['amount'] ?? 0;
+        final amountStr = amount.toString().replaceAllMapped(
+          RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'),
+              (m) => '${m[1]},',
+        );
         return AppNotification(
-          content: entry['raw_text'] ??
-              '${entry['merchant_name'] ?? '미상'} ${entry['amount']}원',
+          content: '$merchant에서 $amountStr원 결제',
           category: entry['category'] ?? '미분류',
         );
       }).toList();
@@ -80,6 +87,17 @@ class _NotificationScreenState extends State<NotificationScreen> {
 
       if (fullText.isEmpty) return;
 
+      // 중복 방지 (5초 내 같은 텍스트 무시)
+      if (_processedNotifications.contains(fullText)) {
+        print('  ↳ 중복 알림, 무시');
+        return;
+      }
+      _processedNotifications.add(fullText);
+      // 5초 후 자동 제거 (다음에 같은 결제 다시 와도 처리되도록)
+      Future.delayed(const Duration(seconds: 5), () {
+        _processedNotifications.remove(fullText);
+      });
+
       print('알림 감지: $fullText');
 
       if (!_isPaymentNotification(fullText)) {
@@ -87,33 +105,32 @@ class _NotificationScreenState extends State<NotificationScreen> {
         return;
       }
 
-      // 1. 서버에 파싱 요청
       final parsed = await ApiService.parseTransaction(fullText);
       if (parsed == null) return;
 
-      // 2. 가계부 저장
       final saved = await ApiService.createLedgerEntry(parsed);
       if (!saved) return;
 
-      // 3. 백엔드에서 다시 불러와서 화면 갱신
       await _loadFromBackend();
     });
   }
 
   IconData _getIconForCategory(String category) {
-    switch (category) {
-      case 'CAFE':
+    switch (category.toLowerCase()) {
       case 'cafe':
-      case 'FOOD':
+        return Icons.local_cafe;
       case 'food':
-      case 'SHOPPING':
-        return Icons.account_balance_wallet;
-      case 'DEPOSIT':
+        return Icons.restaurant;
+      case 'shopping':
+        return Icons.shopping_bag;
+      case 'transport':
+        return Icons.directions_car;
+      case 'deposit':
         return Icons.card_giftcard;
-      case 'SYSTEM':
+      case 'system':
         return Icons.egg_alt;
       default:
-        return Icons.notifications;
+        return Icons.account_balance_wallet;
     }
   }
 
