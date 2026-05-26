@@ -1,41 +1,56 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
+import 'package:notification_listener_service/notification_event.dart';
 import 'package:notification_listener_service/notification_listener_service.dart';
 import '../background_task_handler.dart';
 import '../services/api_service.dart';
+import '../services/notification_processing.dart';
 
 class AppNotification {
   final String content;
   final String category;
 
-  AppNotification({
-    required this.content,
-    required this.category,
-  });
+  AppNotification({required this.content, required this.category});
 }
 
 class NotificationScreen extends StatefulWidget {
-  const NotificationScreen({Key? key}) : super(key: key);
+  const NotificationScreen({super.key});
 
   @override
   State<NotificationScreen> createState() => _NotificationScreenState();
 }
 
 class _NotificationScreenState extends State<NotificationScreen> {
+  static final Set<String> _processedNotificationFingerprints = {};
+
   final Color themeSkyBlue = const Color(0xFFE8F6F8);
   final Color themeDarkBlue = const Color(0xFF1E105C);
 
   List<AppNotification> _notifications = [];
   bool _isLoading = true;
 
-  final Set<String> _processedNotifications = {};
+  StreamSubscription<ServiceNotificationEvent>? _notificationSubscription;
 
   @override
   void initState() {
     super.initState();
-    _startForegroundService();
     _loadFromBackend();
+    _startNotificationProcessing();
+  }
+
+  @override
+  void dispose() {
+    _notificationSubscription?.cancel();
+    super.dispose();
+  }
+
+  Future<void> _startNotificationProcessing() async {
+    await _startForegroundService();
+    if (!mounted) return;
     _listenNotificationsDirect();
+    await _loadActiveNotifications();
   }
 
   Future<void> _startForegroundService() async {
@@ -59,7 +74,7 @@ class _NotificationScreenState extends State<NotificationScreen> {
         final amount = entry['amount'] ?? 0;
         final amountStr = amount.toString().replaceAllMapped(
           RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'),
-              (m) => '${m[1]},',
+          (m) => '${m[1]},',
         );
         return AppNotification(
           content: '$merchant에서 $amountStr원 결제',
@@ -70,49 +85,57 @@ class _NotificationScreenState extends State<NotificationScreen> {
     });
   }
 
-  // 결제 알림 키워드 필터링
-  bool _isPaymentNotification(String content) {
-    const keywords = [
-      '승인', '결제', '출금', '입금', '이체', '취소', '카드',
-    ];
-    return keywords.any((keyword) => content.contains(keyword));
+  Future<void> _loadActiveNotifications() async {
+    try {
+      final granted = await NotificationListenerService.isPermissionGranted();
+      if (!granted) {
+        print('알림 접근 권한 없음: 현재 알림을 읽지 않음');
+        return;
+      }
+
+      final events = await NotificationListenerService.getActiveNotifications();
+      for (final event in events) {
+        await _handleNotificationEvent(event, source: 'active');
+      }
+    } catch (e) {
+      print('현재 알림 조회 에러: $e');
+    }
   }
 
   // 알림 직접 수신 + 백엔드 연동
   void _listenNotificationsDirect() {
-    NotificationListenerService.notificationsStream.listen((event) async {
-      final title = event.title ?? '';
-      final body = event.content ?? '';
-      final fullText = '$title $body'.trim();
+    _notificationSubscription?.cancel();
+    _notificationSubscription = NotificationListenerService.notificationsStream
+        .listen(
+          (event) => _handleNotificationEvent(event, source: 'stream'),
+          onError: (error) => print('알림 스트림 에러: $error'),
+        );
+  }
 
-      if (fullText.isEmpty) return;
+  Future<void> _handleNotificationEvent(
+    ServiceNotificationEvent event, {
+    required String source,
+  }) async {
+    final candidate = NotificationProcessing.candidateFromEvent(event);
+    if (candidate == null) return;
+    if (!mounted) return;
 
-      // 중복 방지 (5초 내 같은 텍스트 무시)
-      if (_processedNotifications.contains(fullText)) {
-        print('  ↳ 중복 알림, 무시');
-        return;
-      }
-      _processedNotifications.add(fullText);
-      // 5초 후 자동 제거 (다음에 같은 결제 다시 와도 처리되도록)
-      Future.delayed(const Duration(seconds: 5), () {
-        _processedNotifications.remove(fullText);
-      });
+    if (_processedNotificationFingerprints.contains(candidate.fingerprint)) {
+      print('  ↳ 중복 알림, 무시');
+      return;
+    }
+    _processedNotificationFingerprints.add(candidate.fingerprint);
 
-      print('알림 감지: $fullText');
+    print('알림 감지($source): ${candidate.rawText}');
 
-      if (!_isPaymentNotification(fullText)) {
-        print('  ↳ 결제 알림 아님, 무시');
-        return;
-      }
+    final parsed = await ApiService.parseTransaction(candidate.rawText);
+    if (parsed == null) return;
 
-      final parsed = await ApiService.parseTransaction(fullText);
-      if (parsed == null) return;
+    final saved = await ApiService.createLedgerEntry(parsed);
+    if (!saved) return;
+    if (!mounted) return;
 
-      final saved = await ApiService.createLedgerEntry(parsed);
-      if (!saved) return;
-
-      await _loadFromBackend();
-    });
+    await _loadFromBackend();
   }
 
   IconData _getIconForCategory(String category) {
@@ -160,50 +183,50 @@ class _NotificationScreenState extends State<NotificationScreen> {
           ? Center(child: CircularProgressIndicator(color: themeDarkBlue))
           : _notifications.isEmpty
           ? Center(
-        child: Text(
-          '감지된 결제 내역이 없습니다',
-          style: TextStyle(color: themeDarkBlue, fontSize: 16),
-        ),
-      )
+              child: Text(
+                '감지된 결제 내역이 없습니다',
+                style: TextStyle(color: themeDarkBlue, fontSize: 16),
+              ),
+            )
           : ListView.builder(
-        padding: const EdgeInsets.all(20.0),
-        physics: const BouncingScrollPhysics(),
-        itemCount: _notifications.length,
-        itemBuilder: (context, index) {
-          final item = _notifications[index];
-          return Container(
-            margin: const EdgeInsets.only(bottom: 12),
-            padding: const EdgeInsets.all(15),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              border: Border.all(color: themeSkyBlue, width: 2),
-              borderRadius: BorderRadius.circular(15),
-            ),
-            child: Row(
-              children: [
-                CircleAvatar(
-                  backgroundColor: themeSkyBlue,
-                  child: Icon(
-                    _getIconForCategory(item.category),
-                    color: themeDarkBlue,
+              padding: const EdgeInsets.all(20.0),
+              physics: const BouncingScrollPhysics(),
+              itemCount: _notifications.length,
+              itemBuilder: (context, index) {
+                final item = _notifications[index];
+                return Container(
+                  margin: const EdgeInsets.only(bottom: 12),
+                  padding: const EdgeInsets.all(15),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    border: Border.all(color: themeSkyBlue, width: 2),
+                    borderRadius: BorderRadius.circular(15),
                   ),
-                ),
-                const SizedBox(width: 15),
-                Expanded(
-                  child: Text(
-                    item.content,
-                    style: const TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w600,
-                      color: Colors.black87,
-                    ),
+                  child: Row(
+                    children: [
+                      CircleAvatar(
+                        backgroundColor: themeSkyBlue,
+                        child: Icon(
+                          _getIconForCategory(item.category),
+                          color: themeDarkBlue,
+                        ),
+                      ),
+                      const SizedBox(width: 15),
+                      Expanded(
+                        child: Text(
+                          item.content,
+                          style: const TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600,
+                            color: Colors.black87,
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
-                ),
-              ],
+                );
+              },
             ),
-          );
-        },
-      ),
     );
   }
 }
