@@ -11,7 +11,7 @@ import '../app_colors.dart';
 
 // --- 1. 전체 화면을 관리하는 껍데기 (네비게이션 바 전용) ---
 class MainScreen extends StatefulWidget {
-  MainScreen({super.key}); // ✅ super.key로 변경
+  MainScreen({Key? key}) : super(key: globalKey);// ✅ super.key로 변경
   static final GlobalKey<_MainScreenState> globalKey = GlobalKey<_MainScreenState>();
 
   @override
@@ -25,6 +25,16 @@ class _MainScreenState extends State<MainScreen> {
   void changeTab(int index) {
     setState(() {
       _selectedIndex = index;
+    });
+  }
+
+  // 카테고리 탭 전환 시 데이터 동기화용 public 메서드
+  void changeTabWithRefresh(int index) {
+    setState(() {
+      _selectedIndex = index;
+    });
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) setState(() {});
     });
   }
 

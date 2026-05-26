@@ -4,8 +4,9 @@ import 'notification_screen.dart';
 import 'ledger_screen.dart';
 import 'category_payment_screen.dart';
 import 'individual_payment_screen.dart';
-import 'group_payment_screen.dart'; // ✅ 추가
+import 'group_payment_screen.dart';
 import 'main_screen.dart';
+import 'app_drawer.dart';
 import '../app_colors.dart';
 import 'add_payment_screen.dart';
 
@@ -290,6 +291,7 @@ class _MainPaymentScreenState extends State<MainPaymentScreen>
       onTap: _isGroupSelectMode ? null : _closeFab,
       child: Scaffold(
         backgroundColor: colors.background,
+        drawer: _isGroupSelectMode ? null : const AppDrawer(),
         appBar: AppBar(
           backgroundColor: colors.background,
           elevation: 0,
@@ -300,9 +302,14 @@ class _MainPaymentScreenState extends State<MainPaymentScreen>
             child: Text('취소',
                 style: TextStyle(color: colors.primaryText, fontSize: 15)),
           )
-              : IconButton(
-            icon: Icon(Icons.menu, color: colors.primaryText, size: 32),
-            onPressed: _closeFab,
+              : Builder(
+            builder: (ctx) => IconButton(
+              icon: Icon(Icons.menu, color: colors.primaryText, size: 32),
+              onPressed: () {
+                _closeFab();
+                Scaffold.of(ctx).openDrawer();
+              },
+            ),
           ),
           title: _isGroupSelectMode
               ? Text('항목 선택',

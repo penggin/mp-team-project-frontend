@@ -4,6 +4,7 @@ import 'package:video_player/video_player.dart';
 import 'package:provider/provider.dart';
 import 'package:notification_listener_service/notification_listener_service.dart';
 import 'notification_screen.dart';
+import 'app_drawer.dart';
 import 'package:first/app_colors.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -74,12 +75,15 @@ class _HomeScreenState extends State<HomeScreen> {
     final colors = context.watch<ThemeProvider>().colors;
     return Scaffold(
       backgroundColor: colors.background,
+      drawer: const AppDrawer(),
       appBar: AppBar(
         backgroundColor: colors.background,
         elevation: 0,
-        leading: IconButton(
+        leading: Builder(
+          builder: (ctx) => IconButton(
             icon: Icon(Icons.menu, color: colors.primaryText, size: 32),
-            onPressed: () {},
+            onPressed: () => Scaffold.of(ctx).openDrawer(),
+          ),
         ),
         actions: [
           IconButton(

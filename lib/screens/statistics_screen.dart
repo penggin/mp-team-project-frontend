@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 import 'notification_screen.dart';
 import 'package:provider/provider.dart';
-import '../app_colors.dart'; // ThemeProvider 있는 파일 경로
+import '../app_colors.dart';
+import 'app_drawer.dart';
 
 // --- 통계 대시보드 화면 위젯 ---
 class StatisticsScreen extends StatelessWidget {
@@ -17,12 +18,15 @@ class StatisticsScreen extends StatelessWidget {
 
     return Scaffold(
       backgroundColor: Colors.white,
+      drawer: const AppDrawer(),
       appBar: AppBar(
         backgroundColor: Colors.white,
         elevation: 0,
-        leading: IconButton(
-          icon: Icon(Icons.menu, color: themeDarkBlue, size: 32),
-          onPressed: () {},
+        leading: Builder(
+          builder: (ctx) => IconButton(
+            icon: Icon(Icons.menu, color: themeDarkBlue, size: 32),
+            onPressed: () => Scaffold.of(ctx).openDrawer(),
+          ),
         ),
         actions: [
           IconButton(

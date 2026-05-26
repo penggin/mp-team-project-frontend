@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import 'notification_screen.dart';
 import 'individual_payment_screen.dart';
 import 'main_payment_screen.dart';
+import 'app_drawer.dart';
 import '../app_colors.dart';
 
 // --- 카테고리별 결제 화면 ---
@@ -65,12 +66,15 @@ class CategoryPaymentScreen extends StatelessWidget {
 
     return Scaffold(
       backgroundColor: colors.background,
+      drawer: const AppDrawer(),
       appBar: AppBar(
         backgroundColor: colors.background,
         elevation: 0,
-        leading: IconButton(
-          icon: Icon(Icons.menu, color: colors.primaryText, size: 32),
-          onPressed: () {},
+        leading: Builder(
+          builder: (ctx) => IconButton(
+            icon: Icon(Icons.menu, color: colors.primaryText, size: 32),
+            onPressed: () => Scaffold.of(ctx).openDrawer(),
+          ),
         ),
         actions: [
           IconButton(

@@ -2,8 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'notification_screen.dart';
 import 'package:first/app_colors.dart';
-import 'package:first/services/api_service.dart'; // ✅ ApiService import
+import 'package:first/services/api_service.dart';
 import 'main_screen.dart';
+import 'app_drawer.dart';
 
 class LedgerScreen extends StatefulWidget {
   const LedgerScreen({Key? key}) : super(key: key);
@@ -212,12 +213,15 @@ class _LedgerScreenState extends State<LedgerScreen> {
 
     return Scaffold(
       backgroundColor: colors.background,
+      drawer: const AppDrawer(),
       appBar: AppBar(
         backgroundColor: colors.background,
         elevation: 0,
-        leading: IconButton(
-          icon: Icon(Icons.menu, color: colors.primaryText, size: 32),
-          onPressed: () {},
+        leading: Builder(
+          builder: (ctx) => IconButton(
+            icon: Icon(Icons.menu, color: colors.primaryText, size: 32),
+            onPressed: () => Scaffold.of(ctx).openDrawer(),
+          ),
         ),
         actions: [
           // ✅ 새로고침 버튼
