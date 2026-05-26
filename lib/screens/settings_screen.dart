@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import '../app_colors.dart';
+import '../services/experience_service.dart';
 
 // --- 설정 화면 위젯 ---
 class SettingsScreen extends StatefulWidget {
@@ -11,9 +13,89 @@ class SettingsScreen extends StatefulWidget {
 }
 
 class _SettingsScreenState extends State<SettingsScreen> {
-  bool isNotificationOn = true; // 알림 스위치 상태
+  bool isNotificationOn = true;
+  int _monthlyBudget = 0;
 
-  // 💡 공통적으로 사용되는 팝업창(다이얼로그)을 띄우는 함수
+  @override
+  void initState() {
+    super.initState();
+    _loadBudget();
+  }
+
+  Future<void> _loadBudget() async {
+    final budget = await ExperienceService.getMonthlyBudget();
+    if (mounted) setState(() => _monthlyBudget = budget);
+  }
+
+  void _showBudgetDialog(ThemeColors colors) {
+    final controller = TextEditingController(
+      text: _monthlyBudget > 0 ? _monthlyBudget.toString() : '',
+    );
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: colors.background,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+        title: Text(
+          '월 예산 설정',
+          style: TextStyle(
+            fontWeight: FontWeight.bold,
+            color: colors.primaryText,
+          ),
+        ),
+        content: TextField(
+          controller: controller,
+          keyboardType: TextInputType.number,
+          inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+          style: TextStyle(color: colors.primaryText),
+          decoration: InputDecoration(
+            hintText: '예: 600000',
+            hintStyle: TextStyle(color: colors.subText),
+            suffixText: '원',
+            suffixStyle: TextStyle(color: colors.primaryText),
+            enabledBorder: UnderlineInputBorder(
+              borderSide: BorderSide(color: colors.cardBackground, width: 2),
+            ),
+            focusedBorder: UnderlineInputBorder(
+              borderSide: BorderSide(color: colors.primaryText, width: 2),
+            ),
+          ),
+        ),
+        actionsAlignment: MainAxisAlignment.spaceEvenly,
+        actions: [
+          TextButton(
+            onPressed: () async {
+              final value = int.tryParse(controller.text) ?? 0;
+              await ExperienceService.setMonthlyBudget(value);
+              if (mounted) setState(() => _monthlyBudget = value);
+              if (ctx.mounted) Navigator.pop(ctx);
+            },
+            child: Text(
+              '확인',
+              style: TextStyle(
+                color: colors.primaryText,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: Text(
+              '취소',
+              style: TextStyle(color: colors.subText),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _formatBudget(int amount) {
+    if (amount <= 0) return '미설정';
+    return '${amount.toString().replaceAllMapped(RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (m) => '${m[1]},')}원';
+  }
+
+  // 공통 확인 다이얼로그
   void _showConfirmDialog(String title, VoidCallback onConfirm) {
     // ✅ 다이얼로그 열 때 현재 테마 색상 가져오기
     final colors = context.read<ThemeProvider>().colors;
@@ -181,7 +263,38 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
             const SizedBox(height: 25),
 
-            // 3. 보안 및 계정 관리 그룹
+            // 3. 예산 설정 그룹
+            Container(
+              decoration: BoxDecoration(
+                border: Border.all(color: colors.cardBackground, width: 2),
+                borderRadius: BorderRadius.circular(15),
+              ),
+              child: ListTile(
+                onTap: () => _showBudgetDialog(colors),
+                title: Text(
+                  '월 예산 설정',
+                  style: TextStyle(
+                    color: colors.primaryText,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                trailing: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      _formatBudget(_monthlyBudget),
+                      style: TextStyle(color: colors.subText),
+                    ),
+                    const SizedBox(width: 4),
+                    Icon(Icons.arrow_forward_ios,
+                        color: colors.primaryText, size: 18),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 25),
+
+            // 4. 보안 및 계정 관리 그룹
             Container(
               decoration: BoxDecoration(
                 border: Border.all(color: colors.cardBackground, width: 2), // ✅ 테마 적용

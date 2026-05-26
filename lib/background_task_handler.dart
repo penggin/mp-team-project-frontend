@@ -2,7 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:notification_listener_service/notification_event.dart';
 import 'package:notification_listener_service/notification_listener_service.dart';
-import 'package:sqflite/sqflite.dart';
+import 'services/api_service.dart';
 import 'services/notification_processing.dart';
 
 @pragma('vm:entry-point')
@@ -16,7 +16,6 @@ class PaymentTaskHandler extends TaskHandler {
   @override
   Future<void> onStart(DateTime timestamp, TaskStarter starter) async {
     debugPrint('백그라운드 서비스 시작');
-    await _initDB();
     await _startNotificationListener();
   }
 
@@ -26,24 +25,6 @@ class PaymentTaskHandler extends TaskHandler {
   @override
   Future<void> onDestroy(DateTime timestamp) async {
     debugPrint('백그라운드 서비스 종료');
-  }
-
-  Future<void> _initDB() async {
-    final db = await openDatabase(
-      'payments.db',
-      version: 1,
-      onCreate: (db, version) async {
-        await db.execute('''
-          CREATE TABLE IF NOT EXISTS payments (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            content TEXT,
-            category TEXT,
-            timestamp INTEGER
-          )
-        ''');
-      },
-    );
-    await db.close();
   }
 
   Future<void> _startNotificationListener() async {
@@ -59,25 +40,15 @@ class PaymentTaskHandler extends TaskHandler {
     final candidate = NotificationProcessing.candidateFromEvent(event);
     if (candidate == null) return;
 
-    final parsed = _parsePaymentMessage(candidate.rawText);
-    if (parsed != null) {
-      await _saveToLocalDB(parsed);
-      FlutterForegroundTask.sendDataToMain(parsed);
-    }
-  }
+    debugPrint('백그라운드 알림 감지: ${candidate.rawText}');
 
-  Map<String, dynamic>? _parsePaymentMessage(String text) {
-    if (text.isEmpty) return null;
-    return {'content': text, 'category': '미분류'};
-  }
+    final parsed = await ApiService.parseTransaction(candidate.rawText);
+    if (parsed == null) return;
 
-  Future<void> _saveToLocalDB(Map<String, dynamic> data) async {
-    final db = await openDatabase('payments.db');
-    await db.insert('payments', {
-      'content': data['content'],
-      'category': data['category'],
-      'timestamp': DateTime.now().millisecondsSinceEpoch,
-    });
-    await db.close();
+    final saved = await ApiService.createLedgerEntry(parsed);
+    if (!saved) return;
+
+    // UI 측에 갱신 신호 전송
+    FlutterForegroundTask.sendDataToMain({'action': 'refresh'});
   }
 }

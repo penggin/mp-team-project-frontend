@@ -10,10 +10,16 @@ class ApiService {
     return prefs.getString('access_token');
   }
 
+// lib/services/api_service.dart
+
   static Future<Map<String, String>> _authHeaders() async {
     final token = await getAccessToken();
+    // 로그를 추가하여 토큰이 실제로 존재하는지 확인합니다.
+    print('DEBUG: 현재 사용 중인 Access Token: ${token ?? "없음"}');
+
     return {
       'Content-Type': 'application/json',
+      // Swagger 명세에 따라 'Bearer ' 문자열을 앞에 붙여야 합니다.
       if (token != null) 'Authorization': 'Bearer $token',
     };
   }
@@ -72,16 +78,40 @@ class ApiService {
   }
 
   // 가계부 목록 조회 (추가)
+  // lib/services/api_service.dart
+
   static Future<List<Map<String, dynamic>>> getLedgerEntries() async {
     try {
       final headers = await _authHeaders();
-      final response = await http.get(
+      var response = await http.get(
         Uri.parse('$baseUrl/api/v1/ledger'),
         headers: headers,
       );
-      print('가계부 조회 응답: ${response.statusCode}');
+
+      print('가계부 조회 응답 코드: ${response.statusCode}');
+
+      // 401 에러가 발생한 경우
+      if (response.statusCode == 401) {
+        print('토큰 만료 감지, 토큰 갱신 시도 중...');
+        bool isRefreshed = await refreshAccessToken(); // 기존에 구현된 메서드 활용
+
+        if (isRefreshed) {
+          print('토큰 갱신 성공, 재요청 시도');
+          final newHeaders = await _authHeaders();
+          response = await http.get(
+            Uri.parse('$baseUrl/api/v1/ledger'),
+            headers: newHeaders,
+          );
+        } else {
+          print('토큰 갱신 실패, 로그아웃 처리');
+          await logout(); // 토큰 삭제
+          return [];
+        }
+      }
+
       if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
+        // 한글 깨짐 방지를 위해 utf8.decode 사용
+        final data = jsonDecode(utf8.decode(response.bodyBytes));
         if (data['success'] == true) {
           final items = data['data']['items'] as List;
           return items.cast<Map<String, dynamic>>();
