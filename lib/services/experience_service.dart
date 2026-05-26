@@ -7,7 +7,7 @@ class ExperienceService {
   static const String _keyPenaltyDay = 'xp_penalty_day';
   static const String _keyPenalizedAmount = 'xp_penalized_amount';
 
-  static const int expPerMinute = 1;
+  static const int expPerMinute = 100;
   static const int xpPerLevel = 100;
   static const int penaltyPer1000Won = 5;
 
