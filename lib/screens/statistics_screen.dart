@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'notification_screen.dart';
+import 'package:provider/provider.dart';
+import '../app_colors.dart'; // ThemeProvider 있는 파일 경로
 
 // --- 통계 대시보드 화면 위젯 ---
 class StatisticsScreen extends StatelessWidget {
@@ -7,9 +9,11 @@ class StatisticsScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // 앱 전체 공통 테마 색상
-    final Color themeSkyBlue = const Color(0xFFE8F6F8);
-    final Color themeDarkBlue = const Color(0xFF1E105C);
+
+    final theme = context.watch<ThemeProvider>().colors;
+
+    final Color themeSkyBlue = theme.cardBackground;
+    final Color themeDarkBlue = theme.primaryText;
 
     return Scaffold(
       backgroundColor: Colors.white,
@@ -57,7 +61,11 @@ class StatisticsScreen extends StatelessWidget {
                       SizedBox(
                         width: 150,
                         height: 150,
-                        child: CustomPaint(painter: DonutChartPainter()),
+                        child: CustomPaint(
+                          painter: DonutChartPainter(
+                            primaryColor: themeDarkBlue,
+                          ),
+                        ),
                       ),
                     ],
                   ),
@@ -103,7 +111,11 @@ class StatisticsScreen extends StatelessWidget {
                     decoration: BoxDecoration(
                       border: Border(left: BorderSide(color: Colors.grey.shade300), bottom: BorderSide(color: Colors.grey.shade300)),
                     ),
-                    child: CustomPaint(painter: LineChartPainter()),
+                    child: CustomPaint(
+                      painter: LineChartPainter(
+                        primaryColor: themeDarkBlue,
+                      ),
+                    ),
                   ),
                   const SizedBox(height: 10),
                   // 범례
@@ -254,6 +266,8 @@ class StatisticsScreen extends StatelessWidget {
 // 🎨 도넛 차트를 그리는 페인터 (기존 유지 + 비율 조정)
 // ==========================================
 class DonutChartPainter extends CustomPainter {
+  final Color primaryColor;
+  DonutChartPainter({required this.primaryColor});
   @override
   void paint(Canvas canvas, Size size) {
     final center = Offset(size.width / 2, size.height / 2);
@@ -295,6 +309,9 @@ class DonutChartPainter extends CustomPainter {
 // 📈 꺾은선 차트를 그리는 페인터 (2월, 3월 비교)
 // ==========================================
 class LineChartPainter extends CustomPainter {
+  final Color primaryColor;
+
+  LineChartPainter({required this.primaryColor});
   @override
   void paint(Canvas canvas, Size size) {
     final w = size.width;
@@ -322,11 +339,11 @@ class LineChartPainter extends CustomPainter {
 
     // 칠하기
     final paint1 = Paint()..color = Colors.grey.shade200 ..style = PaintingStyle.fill;
-    final paint2 = Paint()..color = const Color(0xFF1E105C).withOpacity(0.08) ..style = PaintingStyle.fill;
+    final paint2 = Paint()..color = primaryColor.withOpacity(0.08) ..style = PaintingStyle.fill;
 
     // 테두리 선
     final strokePaint1 = Paint()..color = Colors.grey.shade400 ..style = PaintingStyle.stroke ..strokeWidth = 2;
-    final strokePaint2 = Paint()..color = Colors.blue.shade300 ..style = PaintingStyle.stroke ..strokeWidth = 2;
+    final strokePaint2 = Paint()..color = primaryColor ..style = PaintingStyle.stroke ..strokeWidth = 2;
 
     canvas.drawPath(path1, paint1);
     canvas.drawPath(path2, paint2);

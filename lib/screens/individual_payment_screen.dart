@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../app_colors.dart';
+import 'category_select_screen.dart';
 
 // ✅ TransactionItem 클래스
 class TransactionItem {
@@ -31,9 +32,15 @@ class IndividualPaymentScreen extends StatefulWidget {
 }
 
 class _IndividualPaymentScreenState extends State<IndividualPaymentScreen> {
-  // ✅ 지출 합계에 포함 스위치 상태
   bool _includeInTotal = true;
 
+  late String _selectedCategory;
+
+  @override
+  void initState() {
+    super.initState();
+    _selectedCategory = widget.transaction.category;
+  }
   @override
   Widget build(BuildContext context) {
     final colors = context.watch<ThemeProvider>().colors;
@@ -116,9 +123,38 @@ class _IndividualPaymentScreenState extends State<IndividualPaymentScreen> {
               _buildDivider(colors),
 
               // 카테고리 (> 화살표 포함)
-              _buildArrowRow('카테고리 설정', widget.transaction.category, colors, onTap: () {
-                // TODO: 카테고리 변경
-              }),
+              // 카테고리 (> 화살표 포함)
+              _buildArrowRow(
+                '카테고리 설정',
+                _selectedCategory,
+                colors,
+                onTap: () async {
+                  final result = await Navigator.push<Map<String, dynamic>>(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => CategorySelectScreen(
+                        currentCategory: _selectedCategory,
+                        showChangeDialog: true,
+                      ),
+                    ),
+                  );
+
+                  if (result != null) {
+                    setState(() {
+                      _selectedCategory = result['category'] as String;
+                    });
+
+                    final bool applyToAll =
+                        result['applyToAll'] as bool? ?? false;
+
+                    if (applyToAll) {
+                      // TODO:
+                      // 동일 결제 이력 전체 카테고리 변경
+                    }
+                  }
+                },
+              ),
+
               _buildDivider(colors),
 
               // 메모 (핑크색 텍스트 + > 화살표)
@@ -179,6 +215,7 @@ class _IndividualPaymentScreenState extends State<IndividualPaymentScreen> {
       ),
     );
   }
+
 
   // 화살표(>) 있는 행 (카테고리)
   Widget _buildArrowRow(String label, String value, ThemeColors colors,

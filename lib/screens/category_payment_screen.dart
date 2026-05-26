@@ -1,15 +1,67 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart'; // ✅ 추가
-import 'notification_screen.dart';// 💡 알림 화면으로 넘어가기 위해 초대!
+import 'package:provider/provider.dart';
+import 'notification_screen.dart';
+import 'individual_payment_screen.dart';
+import 'main_payment_screen.dart';
 import '../app_colors.dart';
 
-// --- 마이페이지 (가계부 내역) 화면 ---
+// --- 카테고리별 결제 화면 ---
 class CategoryPaymentScreen extends StatelessWidget {
-  const CategoryPaymentScreen({super.key});
+  /// main_payment_screen 에서 넘갨주는 활성 거래 목록
+  final List<TransactionItem> transactions;
+  /// 그룹화된 인덱스 세트 (=스크린에 노출되지 않는 항목)
+  final Set<int> groupedIndexes;
+
+  static const Map<String, Color> _categoryColors = {
+    '이체':              Color(0xFF9FA8DA),
+    '카테고리 없음':     Color(0xFFBDBDBD),
+    '식비':              Color(0xFFFDD835),
+    '쇼핑, 여가':        Color(0xFFEF9A9A),
+    '여행, 숙박':        Color(0xFFA5D6A7),
+    '카페':              Color(0xFFBCAAA4),
+    '편의점, 마트, 잡화': Color(0xFF9E9E9E),
+    '교통':              Color(0xFF80CBC4),
+  };
+
+  const CategoryPaymentScreen({
+    super.key,
+    required this.transactions,
+    required this.groupedIndexes,
+  });
+
+  /// 활성 거래에서 카테고리 요약 계산
+  List<CategorySummary> _calcCategories() {
+    final Map<String, int> totals = {};
+    for (int i = 0; i < transactions.length; i++) {
+      if (groupedIndexes.contains(i)) continue;
+      final tx = transactions[i];
+      if (tx.isIncome) continue;
+      final raw = tx.amount.replaceAll(RegExp(r'[^0-9]'), '');
+      final val = int.tryParse(raw) ?? 0;
+      totals[tx.category] = (totals[tx.category] ?? 0) + val;
+    }
+    final entries = totals.entries.toList()
+      ..sort((a, b) => b.value.compareTo(a.value));
+    return entries.map((e) => CategorySummary(
+      title: e.key,
+      amountInt: e.value,
+      color: _categoryColors[e.key] ?? const Color(0xFFBDBDBD),
+    )).toList();
+  }
+
+  String _totalAmount(List<CategorySummary> cats) {
+    final total = cats.fold(0, (s, c) => s + c.amountInt);
+    final formatted = total
+        .toString()
+        .replaceAllMapped(RegExp(r'(\d)(?=(\d{3})+(?!\d))'), (m) => '${m[1]},');
+    return '${formatted}원';
+  }
+
   @override
   Widget build(BuildContext context) {
-    // 앱 전체 공통 테마 색상
     final colors = context.watch<ThemeProvider>().colors;
+    final cats = _calcCategories();
+    final total = cats.fold(0, (s, c) => s + c.amountInt);
 
     return Scaffold(
       backgroundColor: colors.background,
@@ -24,7 +76,6 @@ class CategoryPaymentScreen extends StatelessWidget {
           IconButton(
             icon: Icon(Icons.notifications_none, color: colors.primaryText, size: 32),
             onPressed: () {
-              // 알림 화면 연동
               Navigator.push(
                 context,
                 MaterialPageRoute(builder: (context) => const NotificationScreen()),
@@ -44,16 +95,15 @@ class CategoryPaymentScreen extends StatelessWidget {
             Container(
               padding: const EdgeInsets.all(25),
               decoration: BoxDecoration(
-                color: colors.background, // 하늘색 배경
+                color: colors.background,
                 borderRadius: BorderRadius.circular(20),
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // 월 선택
                   Row(
                     children: [
-                      Icon(Icons.chevron_left, color: colors.primaryText  ),
+                      Icon(Icons.chevron_left, color: colors.primaryText),
                       const SizedBox(width: 5),
                       Text('3월', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: colors.primaryText)),
                       const SizedBox(width: 5),
@@ -61,24 +111,24 @@ class CategoryPaymentScreen extends StatelessWidget {
                     ],
                   ),
                   const SizedBox(height: 15),
-                  // 총액
-                  Text('578,450원', style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: colors.primaryText)),
+                  // 동적 지출 총액
+                  Text(_totalAmount(cats), style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: colors.primaryText)),
                   const SizedBox(height: 25),
-                  // 💡 누적 막대그래프 (비율에 맞춰서 너비가 결정됩니다)
+                  // 동적 막대 그래프
                   ClipRRect(
                     borderRadius: BorderRadius.circular(10),
                     child: SizedBox(
                       height: 20,
-                      child: Row(
-                        children: [
-                          Expanded(flex: 35, child: Container(color: Colors.indigo.shade300)),
-                          Expanded(flex: 15, child: Container(color: Colors.grey.shade300)),
-                          Expanded(flex: 8, child: Container(color: Colors.yellow.shade600)),
-                          Expanded(flex: 5, child: Container(color: Colors.red.shade400)),
-                          Expanded(flex: 3, child: Container(color: Colors.green.shade300)),
-                          Expanded(flex: 2, child: Container(color: Colors.grey.shade500)),
-                        ],
-                      ),
+                      child: cats.isEmpty
+                          ? Container(color: const Color(0xFFBDBDBD))
+                          : Row(
+                              children: cats.map((cat) =>
+                                Expanded(
+                                  flex: cat.flexOf(total),
+                                  child: Container(color: cat.color),
+                                )
+                              ).toList(),
+                            ),
                     ),
                   ),
                 ],
@@ -87,42 +137,28 @@ class CategoryPaymentScreen extends StatelessWidget {
             const SizedBox(height: 25),
 
             // 2. 카테고리별 리스트 내역
-            _buildCategoryItem('이체', '350,000 원', Colors.indigo.shade300, colors),
-            _buildCategoryItem('카테고리 없음', '158,000 원', Colors.grey.shade300, colors),
-            _buildCategoryItem('식비', '84,000 원', Colors.yellow.shade600, colors),
-            _buildCategoryItem('쇼핑, 여가', '47,000 원', Colors.red.shade400, colors),
-            _buildCategoryItem('여행, 숙박', '33,000 원', Colors.green.shade300, colors),
-            _buildCategoryItem('카페', '5,000 원', Colors.brown.shade300, colors),
-            _buildCategoryItem('편의점, 마트, 잡화', '2,000 원', Colors.grey.shade500, colors),
+            if (cats.isEmpty)
+              Padding(
+                padding: const EdgeInsets.only(top: 40),
+                child: Text('지출 내역이 없습니다.',
+                    style: TextStyle(color: colors.subText, fontSize: 15)),
+              )
+            else
+              ...cats.map((cat) => _buildCategoryItem(cat.title, cat.amount, cat.color, colors)),
 
-            const SizedBox(height: 80), // 떠 있는 버튼(FAB)을 가리지 않게 아래 여백 추가
+            const SizedBox(height: 80),
           ],
         ),
-      ),
-
-      // 3. 우측 하단 추가(+) 버튼
-      floatingActionButton: FloatingActionButton(
-        onPressed: () {
-          // TODO: 내역 추가 화면 띄우기
-        },
-        backgroundColor: Colors.white,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(50),
-          side: BorderSide(color: colors.background, width: 2), // 하늘색 테두리
-        ),
-        elevation: 2,
-        child: Icon(Icons.add, color: colors.accent, size: 30),
       ),
     );
   }
 
-  // 반복되는 리스트 아이템을 그려주는 헬퍼 함수
   Widget _buildCategoryItem(String title, String amount, Color indicatorColor, ThemeColors colors) {
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: colors.cardBackground, // ✅
+        color: colors.cardBackground,
         borderRadius: BorderRadius.circular(15),
       ),
       child: Row(
@@ -135,7 +171,7 @@ class CategoryPaymentScreen extends StatelessWidget {
               style: TextStyle(
                 fontSize: 16,
                 fontWeight: FontWeight.bold,
-                color: colors.primaryText, // ✅
+                color: colors.primaryText,
               ),
             ),
           ),
@@ -144,7 +180,7 @@ class CategoryPaymentScreen extends StatelessWidget {
             style: TextStyle(
               fontSize: 16,
               fontWeight: FontWeight.bold,
-              color: colors.primaryText, // ✅
+              color: colors.primaryText,
             ),
           ),
         ],

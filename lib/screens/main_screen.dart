@@ -29,19 +29,24 @@ class _MainScreenState extends State<MainScreen> {
   }
 
   // 하단 탭을 눌렀을 때 보여줄 알맹이 화면들 리스트
-  final List<Widget> _screens = [
-    const SettingsScreen(),                     // 💡 0: 이제 임시 텍스트 대신 진짜 설정 화면이 나옵니다!
-    const MainPaymentScreen(),       // 1: 가계부
-    const HomeScreen(),                         // 2: 홈 (기존 고래 화면)
-    const StatisticsScreen(),                   // 3: 통계
-    const CategoryPaymentScreen(),     // 4: 마이페이지
-  ];
+  // ✅ CategoryPaymentScreen은 MainPaymentScreen의 상태를 공유하므로
+  // build() 안에서 동적으로 생성시켰니다.
+  static final GlobalKey<State<MainPaymentScreen>> _paymentKey =
+      GlobalKey<State<MainPaymentScreen>>();
 
   // 탭을 누르면 실행되는 함수
   void _onItemTapped(int index) {
     setState(() {
       _selectedIndex = index;
+      // ✅ 카테고리 탭(4) 이동 시 잠시 후 다시 setState로
+      //    _paymentKey.currentState가 이미 존재하게 되면 데이터가 전달됨
     });
+    if (index == 4) {
+      // 스케줄러 후 한 프레임 뜜려 상태 동기화
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) setState(() {});
+      });
+    }
   }
 
   @override
@@ -49,10 +54,27 @@ class _MainScreenState extends State<MainScreen> {
     final colors = context.watch<ThemeProvider>().colors;
     return Scaffold(
       // 💡 IndexedStack: 화면을 이동해도 영상이 꺼지지 않고 백그라운드에서 유지되게 해주는 마법의 위젯!
-      body: IndexedStack(
-        index: _selectedIndex,
-        children: _screens,
-      ),
+      body: Builder(builder: (context) {
+        // ✅ MainPaymentScreen 상태에서 거래 데이터를 가져와 CategoryPaymentScreen에 주입
+        final transactions = MainPaymentScreen.transactionsOf(_paymentKey);
+        final groupedIndexes = MainPaymentScreen.groupedIndexesOf(_paymentKey);
+
+        final screens = [
+          const SettingsScreen(),
+          MainPaymentScreen(key: _paymentKey),
+          const HomeScreen(),
+          const StatisticsScreen(),
+          CategoryPaymentScreen(
+            transactions: transactions,
+            groupedIndexes: groupedIndexes,
+          ),
+        ];
+
+        return IndexedStack(
+          index: _selectedIndex,
+          children: screens,
+        );
+      }),
       bottomNavigationBar: Container(
         decoration: BoxDecoration(
           color: colors.cardBackground, // ✅ 테마 적용 (하늘색 or 핑크)
