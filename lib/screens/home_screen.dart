@@ -6,19 +6,22 @@ import 'package:notification_listener_service/notification_listener_service.dart
 import 'notification_screen.dart';
 import 'app_drawer.dart';
 import 'package:first/app_colors.dart';
+import '../services/experience_service.dart';
+import '../services/api_service.dart';
 
 class HomeScreen extends StatefulWidget {
-  const HomeScreen({Key? key}) : super(key: key);
+  const HomeScreen({super.key});
 
   @override
   State<HomeScreen> createState() => _HomeScreenState();
 }
 
 class _HomeScreenState extends State<HomeScreen> {
-  int level = 5;
-  double expProgress = 0.6;
-  int todaySpend = 30700;
-  int remainingBalance = 170580;
+  int _level = 1;
+  double _expProgress = 0.0;
+  int _todaySpend = 0;
+  int _monthlyBudget = 0;
+  int _monthlySpend = 0;
 
   final List<String> _comments = [
     "저 너무 배가 불러요!!",
@@ -35,6 +38,7 @@ class _HomeScreenState extends State<HomeScreen> {
   void initState() {
     super.initState();
     _requestPermissions();
+    _loadAll();
     _videoController = VideoPlayerController.asset('assets/killerwhale.mp4')
       ..initialize().then((_) {
         if (!mounted) return;
@@ -45,34 +49,90 @@ class _HomeScreenState extends State<HomeScreen> {
       });
   }
 
-  Future<void> _requestPermissions() async {
-    try {
-      final granted = await NotificationListenerService.isPermissionGranted();
-      if (!granted) {
-        // 설정 화면으로 직접 이동
-        await NotificationListenerService.requestPermission();
-      }
-    } catch (e) {
-      print('권한 요청 에러: $e');
-    }
-  }
   @override
   void dispose() {
     _videoController.dispose();
     super.dispose();
   }
 
+  Future<void> _loadAll() async {
+    // 1. 경과 시간 XP 지급
+    await ExperienceService.addTimeBasedExp();
+
+    // 2. 이달 / 오늘 지출 계산
+    final entries = await ApiService.getLedgerEntries();
+    final now = DateTime.now();
+    int todaySpend = 0;
+    int monthlySpend = 0;
+
+    for (final entry in entries) {
+      if ((entry['type'] as String? ?? '') != 'expense') continue;
+      final amount = (entry['amount'] as num?)?.toInt() ?? 0;
+
+      // transaction_at 없으면 created_at으로 대체
+      final txAtStr = (entry['transaction_at'] as String? ??
+              entry['created_at'] as String? ??
+              '')
+          .trim();
+      if (txAtStr.isEmpty) continue;
+
+      try {
+        final txAt = DateTime.parse(txAtStr).toLocal();
+        if (txAt.year == now.year && txAt.month == now.month) {
+          monthlySpend += amount;
+          if (txAt.day == now.day) todaySpend += amount;
+        }
+      } catch (_) {
+        print('DEBUG 날짜 파싱 실패: $txAtStr');
+      }
+    }
+
+    // 3. 일일 예산 초과 패널티 적용
+    await ExperienceService.applyDailyPenalty(todaySpend);
+
+    // 4. 최신 XP / 예산 로드
+    final totalExp = await ExperienceService.getTotalExp();
+    final monthlyBudget = await ExperienceService.getMonthlyBudget();
+
+    if (!mounted) return;
+    setState(() {
+      _level = ExperienceService.levelFromExp(totalExp);
+      _expProgress = ExperienceService.expProgress(totalExp);
+      _todaySpend = todaySpend;
+      _monthlyBudget = monthlyBudget;
+      _monthlySpend = monthlySpend;
+    });
+  }
+
+  Future<void> _requestPermissions() async {
+    try {
+      final granted = await NotificationListenerService.isPermissionGranted();
+      if (!granted) await NotificationListenerService.requestPermission();
+    } catch (e) {
+      print('권한 요청 에러: $e');
+    }
+  }
+
   void _generateRandomComment() {
     final random = Random();
-    int randomIndex = random.nextInt(_comments.length);
     setState(() {
-      _currentComment = _comments[randomIndex];
+      _currentComment = _comments[random.nextInt(_comments.length)];
     });
+  }
+
+  String _formatAmount(int amount) {
+    return amount.toString().replaceAllMapped(
+      RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'),
+      (m) => '${m[1]},',
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     final colors = context.watch<ThemeProvider>().colors;
+    final int? remainingBudget =
+        _monthlyBudget > 0 ? _monthlyBudget - _monthlySpend : null;
+
     return Scaffold(
       backgroundColor: colors.background,
       drawer: const AppDrawer(),
@@ -87,12 +147,14 @@ class _HomeScreenState extends State<HomeScreen> {
         ),
         actions: [
           IconButton(
-            icon: Icon(Icons.notifications_none, color: colors.primaryText, size: 32),
+            icon:
+                Icon(Icons.notifications_none, color: colors.primaryText, size: 32),
             onPressed: () {
               Navigator.push(
                 context,
-                MaterialPageRoute(builder: (context) => const NotificationScreen()),
-              );
+                MaterialPageRoute(
+                    builder: (context) => const NotificationScreen()),
+              ).then((_) => _loadAll());
             },
           ),
         ],
@@ -105,6 +167,7 @@ class _HomeScreenState extends State<HomeScreen> {
             children: [
               const SizedBox(height: 20),
 
+              // 레벨 / XP / 지출 카드
               Container(
                 padding: const EdgeInsets.all(20),
                 decoration: BoxDecoration(
@@ -115,7 +178,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      'LV : $level',
+                      'LV : $_level',
                       style: TextStyle(
                         fontSize: 18,
                         fontWeight: FontWeight.bold,
@@ -137,7 +200,7 @@ class _HomeScreenState extends State<HomeScreen> {
                           child: ClipRRect(
                             borderRadius: BorderRadius.circular(5),
                             child: LinearProgressIndicator(
-                              value: expProgress,
+                              value: _expProgress,
                               minHeight: 12,
                               backgroundColor: Colors.grey.shade300,
                               valueColor: AlwaysStoppedAnimation<Color>(
@@ -155,30 +218,34 @@ class _HomeScreenState extends State<HomeScreen> {
                         Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                        Text('오늘의 소비', style: TextStyle(color: colors.subText)),
-                        Text(
-                          '${todaySpend.toString().replaceAllMapped(RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (Match m) => '${m[1]},')}원',
-                          style: TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold,
-                            color: colors.primaryText,
-                          ),
-                        ),
-                      ],
-                    ),
-                        Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
+                            Text('오늘의 소비',
+                                style: TextStyle(color: colors.subText)),
                             Text(
-                              '남은 잔액',
-                              style: TextStyle(color: colors.subText),
-                            ),
-                            Text(
-                              '${remainingBalance.toString().replaceAllMapped(RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (Match m) => '${m[1]},')}원',
+                              '${_formatAmount(_todaySpend)}원',
                               style: TextStyle(
                                 fontSize: 18,
                                 fontWeight: FontWeight.bold,
                                 color: colors.primaryText,
+                              ),
+                            ),
+                          ],
+                        ),
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text('남은 예산',
+                                style: TextStyle(color: colors.subText)),
+                            Text(
+                              remainingBudget != null
+                                  ? '${_formatAmount(remainingBudget)}원'
+                                  : '예산 미설정',
+                              style: TextStyle(
+                                fontSize: 18,
+                                fontWeight: FontWeight.bold,
+                                color: remainingBudget != null &&
+                                        remainingBudget < 0
+                                    ? Colors.red
+                                    : colors.primaryText,
                               ),
                             ),
                           ],
@@ -190,6 +257,7 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
               const SizedBox(height: 20),
 
+              // 캐릭터 영상
               Expanded(
                 child: GestureDetector(
                   onTap: _generateRandomComment,
@@ -203,19 +271,23 @@ class _HomeScreenState extends State<HomeScreen> {
                       child: Center(
                         child: _videoController.value.isInitialized
                             ? AspectRatio(
-                          aspectRatio: _videoController.value.aspectRatio,
-                          child: VideoPlayer(_videoController),
-                        )
-                            : CircularProgressIndicator(color: colors.primaryText),
-                        ),
+                                aspectRatio:
+                                    _videoController.value.aspectRatio,
+                                child: VideoPlayer(_videoController),
+                              )
+                            : CircularProgressIndicator(
+                                color: colors.primaryText),
                       ),
                     ),
                   ),
                 ),
+              ),
               const SizedBox(height: 20),
 
+              // 멘트 카드
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 30),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 20, vertical: 30),
                 decoration: BoxDecoration(
                   color: colors.cardBackground,
                   borderRadius: BorderRadius.circular(20),
@@ -224,11 +296,14 @@ class _HomeScreenState extends State<HomeScreen> {
                   child: Text(
                     _currentComment,
                     textAlign: TextAlign.center,
-                    style: TextStyle(fontSize: 16, color: colors.primaryText, height: 1.5),
+                    style: TextStyle(
+                        fontSize: 16,
+                        color: colors.primaryText,
+                        height: 1.5),
                   ),
                 ),
               ),
-              const SizedBox(height: 20)
+              const SizedBox(height: 20),
             ],
           ),
         ),
