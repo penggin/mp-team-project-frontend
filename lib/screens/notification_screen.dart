@@ -38,12 +38,19 @@ class _NotificationScreenState extends State<NotificationScreen> {
     super.initState();
     _loadFromBackend();
     _startNotificationProcessing();
+    FlutterForegroundTask.addTaskDataCallback(_onReceiveTaskData);
   }
 
   @override
   void dispose() {
+    FlutterForegroundTask.removeTaskDataCallback(_onReceiveTaskData);
     _notificationSubscription?.cancel();
     super.dispose();
+  }
+
+  void _onReceiveTaskData(dynamic data) {
+    if (!mounted) return;
+    _loadFromBackend();
   }
 
   Future<void> _startNotificationProcessing() async {
@@ -74,7 +81,7 @@ class _NotificationScreenState extends State<NotificationScreen> {
         final amount = entry['amount'] ?? 0;
         final amountStr = amount.toString().replaceAllMapped(
           RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'),
-          (m) => '${m[1]},',
+              (m) => '${m[1]},',
         );
         return AppNotification(
           content: '$merchant에서 $amountStr원 결제',
@@ -108,14 +115,14 @@ class _NotificationScreenState extends State<NotificationScreen> {
     _notificationSubscription = NotificationListenerService.notificationsStream
         .listen(
           (event) => _handleNotificationEvent(event, source: 'stream'),
-          onError: (error) => print('알림 스트림 에러: $error'),
-        );
+      onError: (error) => print('알림 스트림 에러: $error'),
+    );
   }
 
   Future<void> _handleNotificationEvent(
-    ServiceNotificationEvent event, {
-    required String source,
-  }) async {
+      ServiceNotificationEvent event, {
+        required String source,
+      }) async {
     final candidate = NotificationProcessing.candidateFromEvent(event);
     if (candidate == null) return;
     if (!mounted) return;
@@ -183,50 +190,50 @@ class _NotificationScreenState extends State<NotificationScreen> {
           ? Center(child: CircularProgressIndicator(color: themeDarkBlue))
           : _notifications.isEmpty
           ? Center(
-              child: Text(
-                '감지된 결제 내역이 없습니다',
-                style: TextStyle(color: themeDarkBlue, fontSize: 16),
-              ),
-            )
+        child: Text(
+          '감지된 결제 내역이 없습니다',
+          style: TextStyle(color: themeDarkBlue, fontSize: 16),
+        ),
+      )
           : ListView.builder(
-              padding: const EdgeInsets.all(20.0),
-              physics: const BouncingScrollPhysics(),
-              itemCount: _notifications.length,
-              itemBuilder: (context, index) {
-                final item = _notifications[index];
-                return Container(
-                  margin: const EdgeInsets.only(bottom: 12),
-                  padding: const EdgeInsets.all(15),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    border: Border.all(color: themeSkyBlue, width: 2),
-                    borderRadius: BorderRadius.circular(15),
-                  ),
-                  child: Row(
-                    children: [
-                      CircleAvatar(
-                        backgroundColor: themeSkyBlue,
-                        child: Icon(
-                          _getIconForCategory(item.category),
-                          color: themeDarkBlue,
-                        ),
-                      ),
-                      const SizedBox(width: 15),
-                      Expanded(
-                        child: Text(
-                          item.content,
-                          style: const TextStyle(
-                            fontSize: 14,
-                            fontWeight: FontWeight.w600,
-                            color: Colors.black87,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                );
-              },
+        padding: const EdgeInsets.all(20.0),
+        physics: const BouncingScrollPhysics(),
+        itemCount: _notifications.length,
+        itemBuilder: (context, index) {
+          final item = _notifications[index];
+          return Container(
+            margin: const EdgeInsets.only(bottom: 12),
+            padding: const EdgeInsets.all(15),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              border: Border.all(color: themeSkyBlue, width: 2),
+              borderRadius: BorderRadius.circular(15),
             ),
+            child: Row(
+              children: [
+                CircleAvatar(
+                  backgroundColor: themeSkyBlue,
+                  child: Icon(
+                    _getIconForCategory(item.category),
+                    color: themeDarkBlue,
+                  ),
+                ),
+                const SizedBox(width: 15),
+                Expanded(
+                  child: Text(
+                    item.content,
+                    style: const TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.black87,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          );
+        },
+      ),
     );
   }
 }
