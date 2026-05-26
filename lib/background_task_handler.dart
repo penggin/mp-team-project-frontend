@@ -1,9 +1,9 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
+import 'package:notification_listener_service/notification_event.dart';
 import 'package:notification_listener_service/notification_listener_service.dart';
-import 'package:flutter_sms_inbox/flutter_sms_inbox.dart';
 import 'package:sqflite/sqflite.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+import 'services/notification_processing.dart';
 
 @pragma('vm:entry-point')
 void startCallback() {
@@ -11,7 +11,6 @@ void startCallback() {
 }
 
 class PaymentTaskHandler extends TaskHandler {
-  int _smsCheckCount = 0;
   bool _listenerStarted = false;
 
   @override
@@ -22,14 +21,7 @@ class PaymentTaskHandler extends TaskHandler {
   }
 
   @override
-  Future<void> onRepeatEvent(DateTime timestamp) async {
-    _smsCheckCount++;
-
-    if (_smsCheckCount >= 20) {
-      await _checkNewSms();
-      _smsCheckCount = 0;
-    }
-  }
+  Future<void> onRepeatEvent(DateTime timestamp) async {}
 
   @override
   Future<void> onDestroy(DateTime timestamp) async {
@@ -58,57 +50,25 @@ class PaymentTaskHandler extends TaskHandler {
     if (_listenerStarted) return;
     _listenerStarted = true;
 
-    NotificationListenerService.notificationsStream.listen((event) async {
-      final parsed = _parsePaymentMessage(event.content ?? '');
-      if (parsed != null) {
-        await _saveToLocalDB(parsed);
-        FlutterForegroundTask.sendDataToMain(parsed);
-      }
-    });
+    NotificationListenerService.notificationsStream.listen(
+      _processNotification,
+    );
   }
 
-  Future<void> _checkNewSms() async {
-    final prefs = await SharedPreferences.getInstance();
-    final lastCheck = prefs.getInt('last_sms_check') ?? 0;
+  Future<void> _processNotification(ServiceNotificationEvent event) async {
+    final candidate = NotificationProcessing.candidateFromEvent(event);
+    if (candidate == null) return;
 
-    final query = SmsQuery();
-    final messages = await query.querySms(
-      kinds: [SmsQueryKind.inbox],
-      count: 20,
-    );
-
-    for (final sms in messages) {
-      final smsTime = sms.date?.millisecondsSinceEpoch ?? 0;
-      if (smsTime <= lastCheck) continue;
-
-      final body = sms.body ?? '';
-      if (!_isPaymentSms(body)) continue;
-
-      final parsed = _parsePaymentMessage(body);
-      if (parsed != null) {
-        await _saveToLocalDB(parsed);
-        FlutterForegroundTask.sendDataToMain(parsed);
-      }
+    final parsed = _parsePaymentMessage(candidate.rawText);
+    if (parsed != null) {
+      await _saveToLocalDB(parsed);
+      FlutterForegroundTask.sendDataToMain(parsed);
     }
-
-    await prefs.setInt(
-      'last_sms_check',
-      DateTime.now().millisecondsSinceEpoch,
-    );
-  }
-
-  bool _isPaymentSms(String text) {
-    return text.contains('원 승인') ||
-        text.contains('원 결제') ||
-        text.contains('출금완료');
   }
 
   Map<String, dynamic>? _parsePaymentMessage(String text) {
     if (text.isEmpty) return null;
-    return {
-      'content': text,
-      'category': '미분류',
-    };
+    return {'content': text, 'category': '미분류'};
   }
 
   Future<void> _saveToLocalDB(Map<String, dynamic> data) async {
