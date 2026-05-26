@@ -4,10 +4,23 @@ import 'package:video_player/video_player.dart';
 import 'package:provider/provider.dart';
 import 'package:notification_listener_service/notification_listener_service.dart';
 import 'notification_screen.dart';
+import 'evolution_screen.dart';
 import 'app_drawer.dart';
 import 'package:first/app_colors.dart';
 import '../services/experience_service.dart';
 import '../services/api_service.dart';
+
+// 레벨 → 캐릭터 에셋 매핑
+String characterAsset(int level) {
+  if (level >= 10) return 'assets/killerwhale.mp4';
+  if (level >= 5) return 'assets/bluewhale.mp4';
+  return 'assets/dolphin.mp4';
+}
+
+// 진화가 필요한 레벨 임계값
+bool _crossedEvolution(int prev, int curr) {
+  return (prev < 5 && curr >= 5) || (prev < 10 && curr >= 10);
+}
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -18,17 +31,19 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   int _level = 1;
+  int _prevLevel = 1;
   double _expProgress = 0.0;
   int _todaySpend = 0;
   int _monthlyBudget = 0;
   int _monthlySpend = 0;
+  bool _evolutionPending = false;
 
   final List<String> _comments = [
     "저 너무 배가 불러요!!",
     "이곳저곳 많이 다녔어요!",
     "내 또래에 비해 식비에 10만원 더 사용했어요",
     "오늘은 절약의 날! 잘하고 있어요.",
-    "조금만 더 모으면 다음 레벨이에요!"
+    "조금만 더 모으면 다음 레벨이에요!",
   ];
 
   String _currentComment = "캐릭터를 클릭하면 멘트가 나와요!";
@@ -39,7 +54,17 @@ class _HomeScreenState extends State<HomeScreen> {
     super.initState();
     _requestPermissions();
     _loadAll();
-    _videoController = VideoPlayerController.asset('assets/killerwhale.mp4')
+    _initVideoController(_level);
+  }
+
+  @override
+  void dispose() {
+    _videoController.dispose();
+    super.dispose();
+  }
+
+  void _initVideoController(int level) {
+    _videoController = VideoPlayerController.asset(characterAsset(level))
       ..initialize().then((_) {
         if (!mounted) return;
         setState(() {});
@@ -49,17 +74,9 @@ class _HomeScreenState extends State<HomeScreen> {
       });
   }
 
-  @override
-  void dispose() {
-    _videoController.dispose();
-    super.dispose();
-  }
-
   Future<void> _loadAll() async {
-    // 1. 경과 시간 XP 지급
     await ExperienceService.addTimeBasedExp();
 
-    // 2. 이달 / 오늘 지출 계산
     final entries = await ApiService.getLedgerEntries();
     final now = DateTime.now();
     int todaySpend = 0;
@@ -68,40 +85,83 @@ class _HomeScreenState extends State<HomeScreen> {
     for (final entry in entries) {
       if ((entry['type'] as String? ?? '') != 'expense') continue;
       final amount = (entry['amount'] as num?)?.toInt() ?? 0;
-
-      // transaction_at 없으면 created_at으로 대체
       final txAtStr = (entry['transaction_at'] as String? ??
               entry['created_at'] as String? ??
               '')
           .trim();
       if (txAtStr.isEmpty) continue;
-
       try {
         final txAt = DateTime.parse(txAtStr).toLocal();
         if (txAt.year == now.year && txAt.month == now.month) {
           monthlySpend += amount;
           if (txAt.day == now.day) todaySpend += amount;
         }
-      } catch (_) {
-        print('DEBUG 날짜 파싱 실패: $txAtStr');
-      }
+      } catch (_) {}
     }
 
-    // 3. 일일 예산 초과 패널티 적용
     await ExperienceService.applyDailyPenalty(todaySpend);
 
-    // 4. 최신 XP / 예산 로드
     final totalExp = await ExperienceService.getTotalExp();
     final monthlyBudget = await ExperienceService.getMonthlyBudget();
+    final newLevel = ExperienceService.levelFromExp(totalExp);
 
     if (!mounted) return;
+
+    // 진화 임계값 돌파 감지
+    final shouldEvolve = _crossedEvolution(_prevLevel, newLevel) &&
+        !_evolutionPending;
+
     setState(() {
-      _level = ExperienceService.levelFromExp(totalExp);
+      _prevLevel = _level;
+      _level = newLevel;
       _expProgress = ExperienceService.expProgress(totalExp);
       _todaySpend = todaySpend;
       _monthlyBudget = monthlyBudget;
       _monthlySpend = monthlySpend;
+      if (shouldEvolve) _evolutionPending = true;
     });
+
+    if (shouldEvolve) {
+      // 약간의 딜레이 후 진화 화면 표시 (빌드 완료 후)
+      WidgetsBinding.instance.addPostFrameCallback((_) => _triggerEvolution());
+    } else {
+      // 레벨에 맞는 캐릭터로 교체 (진화 없이 앱 재시작 시)
+      _refreshCharacterIfNeeded(newLevel);
+    }
+  }
+
+  void _refreshCharacterIfNeeded(int newLevel) {
+    final needed = characterAsset(newLevel);
+    // 이미 같은 에셋이면 교체 불필요
+    if (_videoController.dataSource.contains(needed.split('/').last)) return;
+    _videoController.dispose();
+    _initVideoController(newLevel);
+  }
+
+  void _triggerEvolution() {
+    if (!mounted) return;
+    Navigator.of(context).push(
+      PageRouteBuilder(
+        opaque: false,
+        barrierColor: Colors.transparent,
+        transitionDuration: const Duration(milliseconds: 400),
+        pageBuilder: (ctx, animation, _) {
+          return FadeTransition(
+            opacity: animation,
+            child: EvolutionScreen(
+              newCharacterAsset: characterAsset(_level),
+              newLevel: _level,
+              onComplete: () {
+                if (!mounted) return;
+                setState(() => _evolutionPending = false);
+                _videoController.dispose();
+                _initVideoController(_level);
+              },
+            ),
+          );
+        },
+      ),
+    );
   }
 
   Future<void> _requestPermissions() async {
@@ -121,10 +181,12 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   String _formatAmount(int amount) {
-    return amount.toString().replaceAllMapped(
-      RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'),
-      (m) => '${m[1]},',
-    );
+    return amount
+        .toString()
+        .replaceAllMapped(
+          RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'),
+          (m) => '${m[1]},',
+        );
   }
 
   @override
@@ -147,13 +209,17 @@ class _HomeScreenState extends State<HomeScreen> {
         ),
         actions: [
           IconButton(
-            icon:
-                Icon(Icons.notifications_none, color: colors.primaryText, size: 32),
+            icon: Icon(
+              Icons.notifications_none,
+              color: colors.primaryText,
+              size: 32,
+            ),
             onPressed: () {
               Navigator.push(
                 context,
                 MaterialPageRoute(
-                    builder: (context) => const NotificationScreen()),
+                  builder: (context) => const NotificationScreen(),
+                ),
               ).then((_) => _loadAll());
             },
           ),
@@ -177,13 +243,25 @@ class _HomeScreenState extends State<HomeScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      'LV : $_level',
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                        color: colors.primaryText,
-                      ),
+                    Row(
+                      children: [
+                        Text(
+                          'LV : $_level',
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                            color: colors.primaryText,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          _characterLabel(_level),
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: colors.subText,
+                          ),
+                        ),
+                      ],
                     ),
                     const SizedBox(height: 10),
                     Row(
@@ -218,8 +296,10 @@ class _HomeScreenState extends State<HomeScreen> {
                         Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text('오늘의 소비',
-                                style: TextStyle(color: colors.subText)),
+                            Text(
+                              '오늘의 소비',
+                              style: TextStyle(color: colors.subText),
+                            ),
                             Text(
                               '${_formatAmount(_todaySpend)}원',
                               style: TextStyle(
@@ -233,8 +313,10 @@ class _HomeScreenState extends State<HomeScreen> {
                         Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text('남은 예산',
-                                style: TextStyle(color: colors.subText)),
+                            Text(
+                              '남은 예산',
+                              style: TextStyle(color: colors.subText),
+                            ),
                             Text(
                               remainingBudget != null
                                   ? '${_formatAmount(remainingBudget)}원'
@@ -276,7 +358,8 @@ class _HomeScreenState extends State<HomeScreen> {
                                 child: VideoPlayer(_videoController),
                               )
                             : CircularProgressIndicator(
-                                color: colors.primaryText),
+                                color: colors.primaryText,
+                              ),
                       ),
                     ),
                   ),
@@ -286,8 +369,10 @@ class _HomeScreenState extends State<HomeScreen> {
 
               // 멘트 카드
               Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 20, vertical: 30),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 20,
+                  vertical: 30,
+                ),
                 decoration: BoxDecoration(
                   color: colors.cardBackground,
                   borderRadius: BorderRadius.circular(20),
@@ -297,9 +382,10 @@ class _HomeScreenState extends State<HomeScreen> {
                     _currentComment,
                     textAlign: TextAlign.center,
                     style: TextStyle(
-                        fontSize: 16,
-                        color: colors.primaryText,
-                        height: 1.5),
+                      fontSize: 16,
+                      color: colors.primaryText,
+                      height: 1.5,
+                    ),
                   ),
                 ),
               ),
@@ -309,5 +395,11 @@ class _HomeScreenState extends State<HomeScreen> {
         ),
       ),
     );
+  }
+
+  String _characterLabel(int level) {
+    if (level >= 10) return '범고래';
+    if (level >= 5) return '파란 고래';
+    return '돌고래';
   }
 }
