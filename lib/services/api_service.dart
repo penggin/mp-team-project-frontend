@@ -16,13 +16,19 @@ class ApiService {
 
   static http.Client _httpClient = http.Client();
 
-  static Future<String?> getAccessToken() async {
+  static Future<SharedPreferences> _freshPreferences() async {
     final prefs = await SharedPreferences.getInstance();
+    await prefs.reload();
+    return prefs;
+  }
+
+  static Future<String?> getAccessToken() async {
+    final prefs = await _freshPreferences();
     return prefs.getString(_accessTokenKey);
   }
 
   static Future<String?> getRefreshToken() async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await _freshPreferences();
     return prefs.getString(_refreshTokenKey);
   }
 
@@ -172,7 +178,7 @@ class ApiService {
   }
 
   static Future<bool> _ensureTokenLifecycle() async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await _freshPreferences();
     final accessToken = prefs.getString(_accessTokenKey);
     final refreshToken = prefs.getString(_refreshTokenKey);
     final accessTokenExpiresAt = prefs.getString(_accessTokenExpiresAtKey);
@@ -640,8 +646,8 @@ class ApiService {
   // 토큰 갱신
   static Future<bool> refreshAccessToken() async {
     try {
-      final prefs = await SharedPreferences.getInstance();
-      final refreshToken = await getRefreshToken();
+      final prefs = await _freshPreferences();
+      final refreshToken = prefs.getString(_refreshTokenKey);
       if (refreshToken == null || refreshToken.isEmpty) {
         await clearTokens();
         return false;

@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:shared_preferences_platform_interface/shared_preferences_platform_interface.dart';
 
 import 'package:first/services/api_service.dart';
 
@@ -128,6 +129,32 @@ void main() {
     expect(prefs.getString('access_token'), isNull);
     expect(prefs.getString('refresh_token'), isNull);
   });
+
+  test(
+    'hasValidToken reloads tokens written after the preferences cache was created',
+    () async {
+      SharedPreferences.setMockInitialValues({});
+      final cachedPrefs = await SharedPreferences.getInstance();
+      expect(cachedPrefs.getString('access_token'), isNull);
+
+      await SharedPreferencesStorePlatform.instance.setValue(
+        'String',
+        'flutter.access_token',
+        'fresh-access',
+      );
+      await SharedPreferencesStorePlatform.instance.setValue(
+        'String',
+        'flutter.refresh_token',
+        'fresh-refresh',
+      );
+
+      final hasToken = await ApiService.hasValidToken();
+
+      expect(hasToken, true);
+      expect(cachedPrefs.getString('access_token'), 'fresh-access');
+      expect(cachedPrefs.getString('refresh_token'), 'fresh-refresh');
+    },
+  );
 
   test(
     'hasValidToken refreshes when the stored access token is expired',
