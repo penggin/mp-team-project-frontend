@@ -16,6 +16,7 @@ class ExperienceService {
   static const String _keyLastLevel = 'xp_last_level';
 
   static final ValueNotifier<bool> demoModeEnabled = ValueNotifier(false);
+  static final ValueNotifier<int> monthlyBudgetNotifier = ValueNotifier(0);
 
   static const int expPerSecond = 7;
   static const int expPerMinute = 1;
@@ -50,6 +51,7 @@ class ExperienceService {
   static Future<void> setMonthlyBudget(int amount) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setInt(_keyMonthlyBudget, amount);
+    monthlyBudgetNotifier.value = amount;
   }
 
   /// 하루 기본 예산 = 월 예산 / 30

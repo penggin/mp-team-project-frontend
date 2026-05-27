@@ -77,6 +77,7 @@ class _HomeScreenState extends State<HomeScreen> {
     _requestPermissions();
     _isDemoModeEnabled = ExperienceService.demoModeEnabled.value;
     ExperienceService.demoModeEnabled.addListener(_onDemoModeChanged);
+    ExperienceService.monthlyBudgetNotifier.addListener(_onBudgetChanged);
     ExperienceService.loadDemoMode();
     _loadAll().then((usesBackendPetState) {
       if (mounted && !usesBackendPetState) _startXpTimer();
@@ -105,6 +106,7 @@ class _HomeScreenState extends State<HomeScreen> {
   void dispose() {
     _xpTimer?.cancel();
     ExperienceService.demoModeEnabled.removeListener(_onDemoModeChanged);
+    ExperienceService.monthlyBudgetNotifier.removeListener(_onBudgetChanged);
     _videoController.dispose();
     super.dispose();
   }
@@ -114,6 +116,11 @@ class _HomeScreenState extends State<HomeScreen> {
     setState(() {
       _isDemoModeEnabled = ExperienceService.demoModeEnabled.value;
     });
+  }
+
+  void _onBudgetChanged() {
+    if (!mounted) return;
+    _loadAll();
   }
 
   // ── 실시간 XP 타이머 ──────────────────────────────────────────
