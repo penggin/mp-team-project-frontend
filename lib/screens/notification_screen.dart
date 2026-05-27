@@ -7,6 +7,9 @@ import 'package:notification_listener_service/notification_listener_service.dart
 import '../background_task_handler.dart';
 import '../services/api_service.dart';
 import '../services/notification_processing.dart';
+import '../services/experience_service.dart';
+import 'budget_alert_dialog.dart';
+import 'main_screen.dart';
 
 class AppNotification {
   final String content;
@@ -143,6 +146,46 @@ class _NotificationScreenState extends State<NotificationScreen> {
     if (!mounted) return;
 
     await _loadFromBackend();
+
+    // ── 하루 예산 초과 체크 ──
+    await _checkDailyBudgetAndAlert();
+  }
+
+  /// 결제 감지 후 하루 지출 재계산 후 예산 초과면 알림창
+  Future<void> _checkDailyBudgetAndAlert() async {
+    // 오늘 지출 합계 계산
+    final entries = await ApiService.getLedgerEntries();
+    final now = DateTime.now();
+    int todaySpend = 0;
+    for (final entry in entries) {
+      if ((entry['type'] as String? ?? '') != 'expense') continue;
+      final amount = (entry['amount'] as num?)?.toInt() ?? 0;
+      final txAtStr = (entry['transaction_at'] as String? ??
+              entry['created_at'] as String? ?? '').trim();
+      if (txAtStr.isEmpty) continue;
+      try {
+        final txAt = DateTime.parse(txAtStr).toLocal();
+        if (txAt.year == now.year &&
+            txAt.month == now.month &&
+            txAt.day == now.day) {
+          todaySpend += amount;
+        }
+      } catch (_) {}
+    }
+
+    // 오늘 지출 기록 갱신
+    await ExperienceService.recordTodaySpend(todaySpend);
+
+    // 초과 여부 확인
+    final exceeded = await ExperienceService.checkDailyBudgetExceeded(todaySpend);
+    if (!exceeded || !mounted) return;
+
+    BudgetAlertDialog.show(
+      context,
+      onGoToHistory: () {
+        MainScreen.globalKey.currentState?.changeTab(1);
+      },
+    );
   }
 
   IconData _getIconForCategory(String category) {

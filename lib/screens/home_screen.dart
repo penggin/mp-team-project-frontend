@@ -10,6 +10,8 @@ import 'app_drawer.dart';
 import 'package:first/app_colors.dart';
 import '../services/experience_service.dart';
 import '../services/api_service.dart';
+import 'budget_alert_dialog.dart';
+import 'main_screen.dart';
 
 // 레벨 → 캐릭터 에셋 매핑
 String characterAsset(int level) {
@@ -39,6 +41,11 @@ class _HomeScreenState extends State<HomeScreen> {
   int _monthlySpend = 0;
   bool _evolutionPending = false;
 
+  // 일일 예산 관련
+  int _dailyBaseBudget = 0;
+  int _carryover = 0;
+  bool _budgetAlertShown = false; // 같은 날 중복 표시 방지
+
   Timer? _xpTimer;
   bool _ticking = false;
 
@@ -61,6 +68,31 @@ class _HomeScreenState extends State<HomeScreen> {
       if (mounted) _startXpTimer();
     });
     _initVideoController(_level);
+  }
+
+  Future<void> _loadDailyBudget() async {
+    final base = await ExperienceService.getDailyBaseBudget();
+    final carryover = await ExperienceService.getCarryoverAmount();
+    if (!mounted) return;
+    setState(() {
+      _dailyBaseBudget = base;
+      _carryover = carryover;
+    });
+  }
+
+  Future<void> _checkAndShowBudgetAlert() async {
+    if (_budgetAlertShown) return;
+    final exceeded = await ExperienceService.checkDailyBudgetExceeded(_todaySpend);
+    if (!exceeded || !mounted) return;
+    _budgetAlertShown = true;
+    BudgetAlertDialog.show(
+      context,
+      onGoToHistory: () {
+        // 전체 결제 내역: 가계부 탭(1번째)으로 이동
+        Navigator.of(context).popUntil((route) => route.isFirst);
+        MainScreen.globalKey.currentState?.changeTab(1);
+      },
+    );
   }
 
   @override
@@ -147,10 +179,13 @@ class _HomeScreenState extends State<HomeScreen> {
     }
 
     await ExperienceService.applyDailyPenalty(todaySpend);
+    await ExperienceService.recordTodaySpend(todaySpend);
 
     final totalExp = await ExperienceService.getTotalExp();
     final monthlyBudget = await ExperienceService.getMonthlyBudget();
     final newLevel = ExperienceService.levelFromExp(totalExp);
+    final dailyBase = await ExperienceService.getDailyBaseBudget();
+    final carryover = await ExperienceService.getCarryoverAmount();
 
     if (!mounted) return;
 
@@ -163,8 +198,13 @@ class _HomeScreenState extends State<HomeScreen> {
       _todaySpend = todaySpend;
       _monthlyBudget = monthlyBudget;
       _monthlySpend = monthlySpend;
+      _dailyBaseBudget = dailyBase;
+      _carryover = carryover;
       if (shouldEvolve) _evolutionPending = true;
     });
+
+    // 하루 예산 초과 여부 체크
+    if (mounted) await _checkAndShowBudgetAlert();
 
     if (shouldEvolve) {
       WidgetsBinding.instance.addPostFrameCallback((_) => _triggerEvolution());
@@ -232,6 +272,56 @@ class _HomeScreenState extends State<HomeScreen> {
         );
   }
 
+  /// 일일 예산 초과 그래프 (짧은 바 형태, 상단 카드 내부에 삽입)
+  List<Widget> _buildDailyBudgetBar(ThemeColors colors) {
+    final totalBudget = _dailyBaseBudget + _carryover;
+    final isOver = _todaySpend > totalBudget;
+    // 진행률: 예산 대비 지출 비율, 최대 1.0
+    final progress = totalBudget > 0
+        ? (_todaySpend / totalBudget).clamp(0.0, 1.0)
+        : 0.0;
+
+    return [
+      const SizedBox(height: 14),
+      Row(
+        children: [
+          Expanded(
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(4),
+              child: LinearProgressIndicator(
+                value: progress,
+                minHeight: 6,
+                backgroundColor: Colors.grey.shade300,
+                valueColor: AlwaysStoppedAnimation<Color>(
+                  isOver ? Colors.red : colors.primaryText,
+                ),
+              ),
+            ),
+          ),
+          if (isOver) ...
+            [
+              const SizedBox(width: 8),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                decoration: BoxDecoration(
+                  color: Colors.red.withOpacity(0.15),
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: const Text(
+                  '초과',
+                  style: TextStyle(
+                    color: Colors.red,
+                    fontSize: 11,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+            ],
+        ],
+      ),
+    ];
+  }
+
   @override
   Widget build(BuildContext context) {
     final colors = context.watch<ThemeProvider>().colors;
@@ -274,11 +364,11 @@ class _HomeScreenState extends State<HomeScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              const SizedBox(height: 20),
+              const SizedBox(height: 15),
 
               // 레벨 / XP / 지출 카드
               Container(
-                padding: const EdgeInsets.all(20),
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                 decoration: BoxDecoration(
                   color: colors.cardBackground,
                   borderRadius: BorderRadius.circular(20),
@@ -291,7 +381,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         Text(
                           'LV : $_level',
                           style: TextStyle(
-                            fontSize: 18,
+                            fontSize: 16,
                             fontWeight: FontWeight.bold,
                             color: colors.primaryText,
                           ),
@@ -300,18 +390,19 @@ class _HomeScreenState extends State<HomeScreen> {
                         Text(
                           _characterLabel(_level),
                           style: TextStyle(
-                            fontSize: 13,
+                            fontSize: 12,
                             color: colors.subText,
                           ),
                         ),
                       ],
                     ),
-                    const SizedBox(height: 10),
+                    const SizedBox(height: 8),
                     Row(
                       children: [
                         Text(
                           'EXP',
                           style: TextStyle(
+                            fontSize: 13,
                             fontWeight: FontWeight.bold,
                             color: colors.primaryText,
                           ),
@@ -322,7 +413,7 @@ class _HomeScreenState extends State<HomeScreen> {
                             borderRadius: BorderRadius.circular(5),
                             child: LinearProgressIndicator(
                               value: _expProgress,
-                              minHeight: 12,
+                              minHeight: 10,
                               backgroundColor: Colors.grey.shade300,
                               valueColor: AlwaysStoppedAnimation<Color>(
                                 colors.primaryText,
@@ -332,7 +423,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         ),
                       ],
                     ),
-                    const SizedBox(height: 20),
+                    const SizedBox(height: 12),
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
@@ -341,12 +432,12 @@ class _HomeScreenState extends State<HomeScreen> {
                           children: [
                             Text(
                               '오늘의 소비',
-                              style: TextStyle(color: colors.subText),
+                              style: TextStyle(fontSize: 12, color: colors.subText),
                             ),
                             Text(
                               '${_formatAmount(_todaySpend)}원',
                               style: TextStyle(
-                                fontSize: 18,
+                                fontSize: 16,
                                 fontWeight: FontWeight.bold,
                                 color: colors.primaryText,
                               ),
@@ -358,14 +449,14 @@ class _HomeScreenState extends State<HomeScreen> {
                           children: [
                             Text(
                               '남은 예산',
-                              style: TextStyle(color: colors.subText),
+                              style: TextStyle(fontSize: 12, color: colors.subText),
                             ),
                             Text(
                               remainingBudget != null
                                   ? '${_formatAmount(remainingBudget)}원'
                                   : '예산 미설정',
                               style: TextStyle(
-                                fontSize: 18,
+                                fontSize: 16,
                                 fontWeight: FontWeight.bold,
                                 color: remainingBudget != null &&
                                         remainingBudget < 0
@@ -377,10 +468,12 @@ class _HomeScreenState extends State<HomeScreen> {
                         ),
                       ],
                     ),
+                    // ── 일일 예산 초과 그래프 (짧게) ──
+                    if (_dailyBaseBudget > 0) ..._buildDailyBudgetBar(colors),
                   ],
                 ),
               ),
-              const SizedBox(height: 20),
+              const SizedBox(height: 14),
 
               // 캐릭터 영상
               Expanded(

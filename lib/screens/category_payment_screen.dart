@@ -5,6 +5,7 @@ import 'individual_payment_screen.dart';
 import 'main_payment_screen.dart';
 import 'app_drawer.dart';
 import '../app_colors.dart';
+import 'category_detail_screen.dart';
 
 // --- 카테고리별 결제 화면 ---
 class CategoryPaymentScreen extends StatelessWidget {
@@ -148,7 +149,7 @@ class CategoryPaymentScreen extends StatelessWidget {
                     style: TextStyle(color: colors.subText, fontSize: 15)),
               )
             else
-              ...cats.map((cat) => _buildCategoryItem(cat.title, cat.amount, cat.color, colors)),
+              ...cats.map((cat) => _buildCategoryItem(context,cat.title, cat.amount, cat.color, colors,)),
 
             const SizedBox(height: 80),
           ],
@@ -156,38 +157,69 @@ class CategoryPaymentScreen extends StatelessWidget {
       ),
     );
   }
+  Widget _buildCategoryItem(
+      BuildContext context,
+      String title,
+      String amount,
+      Color indicatorColor,
+      ThemeColors colors,
+      ) {
+    return GestureDetector(
+      onTap: () {
+        final filtered = transactions.where((tx) {
+          return !groupedIndexes.contains(transactions.indexOf(tx)) &&
+              tx.category == title &&
+              !tx.isIncome;
+        }).toList();
 
-  Widget _buildCategoryItem(String title, String amount, Color indicatorColor, ThemeColors colors) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: colors.cardBackground,
-        borderRadius: BorderRadius.circular(15),
-      ),
-      child: Row(
-        children: [
-          CircleAvatar(radius: 12, backgroundColor: indicatorColor),
-          const SizedBox(width: 15),
-          Expanded(
-            child: Text(
-              title,
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => CategoryDetailScreen(
+              category: title,
+              transactions: filtered,
+            ),
+          ),
+        );
+      },
+
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 12),
+        padding: const EdgeInsets.all(20),
+        decoration: BoxDecoration(
+          color: colors.cardBackground,
+          borderRadius: BorderRadius.circular(15),
+        ),
+        child: Row(
+          children: [
+            CircleAvatar(
+              radius: 12,
+              backgroundColor: indicatorColor,
+            ),
+
+            const SizedBox(width: 15),
+
+            Expanded(
+              child: Text(
+                title,
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                  color: colors.primaryText,
+                ),
+              ),
+            ),
+
+            Text(
+              amount,
               style: TextStyle(
                 fontSize: 16,
                 fontWeight: FontWeight.bold,
                 color: colors.primaryText,
               ),
             ),
-          ),
-          Text(
-            amount,
-            style: TextStyle(
-              fontSize: 16,
-              fontWeight: FontWeight.bold,
-              color: colors.primaryText,
-            ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }

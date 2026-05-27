@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
 import 'category_payment_screen.dart';
-import 'individual_payment_screen.dart'; // ✅ 추가
+import 'individual_payment_screen.dart';
 import '../app_colors.dart';
 import 'category_select_screen.dart';
+import '../services/experience_service.dart';
+import 'budget_alert_dialog.dart';
+import 'main_screen.dart';
 
 class AddPaymentScreen extends StatefulWidget {
   final Function(TransactionItem) onAdd;
@@ -23,6 +26,32 @@ class _AddPaymentScreenState extends State<AddPaymentScreen> {
   final TextEditingController titleController = TextEditingController();
 
   String selectedCategory = '카테고리 없음';
+
+  /// 결제 추가 후 하루 예산 초과 여부를 체크—창이 이미 닫혀서 BuildContext는 원래 화면의 것을 사용
+  Future<void> _checkBudgetAfterAdd(BuildContext ctx, int addedAmount) async {
+    // 오늘 지출 기록 업데이트 (현지에서 정확한 합계를 알 수 없으므로 개산)
+    final prefs = await _getSpendFromPrefs();
+    final newTotal = prefs + addedAmount;
+    await ExperienceService.recordTodaySpend(newTotal);
+
+    final exceeded = await ExperienceService.checkDailyBudgetExceeded(newTotal);
+    if (!exceeded) return;
+
+    // 다시 마운트되어 있는 상위 컨텍스트가 필요
+    if (!ctx.mounted) return;
+    BudgetAlertDialog.show(
+      ctx,
+      onGoToHistory: () {
+        MainScreen.globalKey.currentState?.changeTab(1);
+      },
+    );
+  }
+
+  Future<int> _getSpendFromPrefs() async {
+    // ExperienceService의 오늘 지출 기록을 읽어온다
+    final spend = await ExperienceService.getTodayRecordedSpend();
+    return spend;
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -220,8 +249,15 @@ class _AddPaymentScreenState extends State<AddPaymentScreen> {
                 );
 
                 widget.onAdd(item);
-
                 Navigator.pop(context);
+
+                // 지출일 때만 하루 예산 초과 체크
+                if (!isIncome) {
+                  _checkBudgetAfterAdd(
+                    context,
+                    int.tryParse(amount.replaceAll(',', '')) ?? 0,
+                  );
+                }
               },
               child: Container(
                 height: 56,

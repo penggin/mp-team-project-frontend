@@ -6,6 +6,11 @@ class ExperienceService {
   static const String _keyMonthlyBudget = 'xp_monthly_budget';
   static const String _keyPenaltyDay = 'xp_penalty_day';
   static const String _keyPenalizedAmount = 'xp_penalized_amount';
+  // 일일 예산 이월 관련 키
+  static const String _keyCarryoverDate = 'budget_carryover_date';
+  static const String _keyCarryoverAmount = 'budget_carryover_amount';
+  static const String _keyTodaySpendDate = 'budget_today_spend_date';
+  static const String _keyTodaySpendAmount = 'budget_today_spend_amount';
 
   static const int expPerSecond = 7;   // ~58초에 레벨 5 도달 (400 XP)
   static const int xpPerLevel = 100;
@@ -29,6 +34,86 @@ class ExperienceService {
   static Future<void> setMonthlyBudget(int amount) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setInt(_keyMonthlyBudget, amount);
+  }
+
+  /// 하루 기본 예산 = 월 예산 / 30
+  static Future<int> getDailyBaseBudget() async {
+    final monthly = await getMonthlyBudget();
+    if (monthly <= 0) return 0;
+    return monthly ~/ 30;
+  }
+
+  /// 오늘 날짜 키 (yyyy-MM-dd)
+  static String _todayStr() {
+    final now = DateTime.now();
+    return '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
+  }
+
+  /// 전날 미사용 금액을 이월로 저장 (자정 이후 첫 호출 시 자동 처리)
+  /// 반환값: 오늘 사용 가능한 이월 금액
+  static Future<int> getCarryoverAmount() async {
+    final prefs = await SharedPreferences.getInstance();
+    final today = _todayStr();
+    final savedDate = prefs.getString(_keyCarryoverDate) ?? '';
+
+    // 이미 오늘 이월 처리됨 → 그대로 반환
+    if (savedDate == today) {
+      return prefs.getInt(_keyCarryoverAmount) ?? 0;
+    }
+
+    // 새 날 → 전날 미사용 금액을 이월로 계산
+    final yesterday = _yesterdayStr();
+    final spendDate = prefs.getString(_keyTodaySpendDate) ?? '';
+    final dailyBase = await getDailyBaseBudget();
+    int carryover = 0;
+
+    if (spendDate == yesterday) {
+      // 전날 지출이 기록된 경우
+      final yesterdaySpend = prefs.getInt(_keyTodaySpendAmount) ?? 0;
+      final unused = dailyBase - yesterdaySpend;
+      carryover = unused > 0 ? unused : 0;
+    }
+    // 전날 기록이 없으면 이월 없음 (carryover = 0)
+
+    await prefs.setString(_keyCarryoverDate, today);
+    await prefs.setInt(_keyCarryoverAmount, carryover);
+    return carryover;
+  }
+
+  /// 오늘 지출 금액 기록 (결제 감지 시마다 갱신)
+  static Future<void> recordTodaySpend(int totalTodaySpend) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_keyTodaySpendDate, _todayStr());
+    await prefs.setInt(_keyTodaySpendAmount, totalTodaySpend);
+  }
+
+  /// 오늘 기록된 지출 금액 읽기 (오늘 날짜가 아니면 0 반환)
+  static Future<int> getTodayRecordedSpend() async {
+    final prefs = await SharedPreferences.getInstance();
+    final today = _todayStr();
+    final savedDate = prefs.getString(_keyTodaySpendDate) ?? '';
+    if (savedDate != today) return 0;
+    return prefs.getInt(_keyTodaySpendAmount) ?? 0;
+  }
+
+  /// 오늘 사용 가능한 총 예산 = 일 기본 예산 + 이월
+  static Future<int> getTodayTotalBudget() async {
+    final base = await getDailyBaseBudget();
+    final carryover = await getCarryoverAmount();
+    return base + carryover;
+  }
+
+  /// 하루 예산을 초과했는지 확인
+  /// 반환: 초과 여부 (true면 알림창 표시 필요)
+  static Future<bool> checkDailyBudgetExceeded(int todaySpend) async {
+    final totalBudget = await getTodayTotalBudget();
+    if (totalBudget <= 0) return false;
+    return todaySpend > totalBudget;
+  }
+
+  static String _yesterdayStr() {
+    final yesterday = DateTime.now().subtract(const Duration(days: 1));
+    return '${yesterday.year}-${yesterday.month.toString().padLeft(2, '0')}-${yesterday.day.toString().padLeft(2, '0')}';
   }
 
   /// 마지막 저장 이후 경과 초만큼 XP 지급. 타이머/재진입 모두 사용.
