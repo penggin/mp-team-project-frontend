@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:ui';
 
 import 'package:flutter/foundation.dart';
@@ -38,6 +39,7 @@ class PaymentTaskHandler extends TaskHandler {
   final TaskDataSender _sendDataToMain;
 
   bool _listenerStarted = false;
+  StreamSubscription<ServiceNotificationEvent>? _notificationSubscription;
 
   @override
   Future<void> onStart(DateTime timestamp, TaskStarter starter) async {
@@ -49,20 +51,42 @@ class PaymentTaskHandler extends TaskHandler {
   @override
   Future<void> onRepeatEvent(DateTime timestamp) async {
     await _maintainTokenLifecycle();
+    await _startNotificationListener();
   }
 
   @override
   Future<void> onDestroy(DateTime timestamp) async {
+    await _notificationSubscription?.cancel();
+    _notificationSubscription = null;
+    _listenerStarted = false;
     debugPrint('백그라운드 서비스 종료');
   }
 
   Future<void> _startNotificationListener() async {
     if (_listenerStarted) return;
-    _listenerStarted = true;
 
-    NotificationListenerService.notificationsStream.listen(
-      _processNotification,
-    );
+    final hasPermission =
+        await NotificationListenerService.isPermissionGranted();
+    if (!hasPermission) {
+      debugPrint('알림 리스너 권한 없음 — 다음 반복 이벤트에서 재시도');
+      return;
+    }
+
+    _listenerStarted = true;
+    await _notificationSubscription?.cancel();
+    _notificationSubscription = NotificationListenerService.notificationsStream
+        .listen(
+          _processNotification,
+          onError: (e) {
+            debugPrint('알림 스트림 에러: $e');
+            _listenerStarted = false;
+          },
+          onDone: () {
+            debugPrint('알림 스트림 종료 — 재연결 대기 중');
+            _listenerStarted = false;
+          },
+        );
+    debugPrint('알림 리스너 시작됨');
   }
 
   Future<bool> _maintainTokenLifecycle() async {
