@@ -1,11 +1,15 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
+import 'package:notification_listener_service/notification_event.dart';
+import 'package:notification_listener_service/notification_listener_service.dart';
 import '../background_task_handler.dart';
 import '../services/api_service.dart';
 import '../services/category_mapper.dart';
 import '../services/experience_service.dart';
+import '../services/notification_processing.dart';
 import '../services/payment_push_notification_service.dart';
 import 'budget_alert_dialog.dart';
 import 'login_screen.dart';
@@ -38,16 +42,18 @@ class NotificationScreen extends StatefulWidget {
 }
 
 class _NotificationScreenState extends State<NotificationScreen> {
-  static const Duration _liveRefreshInterval = Duration(seconds: 5);
+  static const Duration _liveRefreshInterval = Duration(seconds: 3);
+
+  // 같은 알림을 UI와 백그라운드 서비스가 중복 처리하지 않도록 방지
+  static final Set<String> _processedNotificationFingerprints = {};
 
   final Color themeSkyBlue = const Color(0xFFE8F6F8);
   final Color themeDarkBlue = const Color(0xFF1E105C);
 
   List<AppNotification> _notifications = [];
-  final Set<String> _clearedNotificationKeys = {};
   bool _isLoading = true;
-  bool _isRefreshing = false;
   Timer? _liveRefreshTimer;
+  StreamSubscription<ServiceNotificationEvent>? _notificationSubscription;
 
   @override
   void initState() {
@@ -56,6 +62,7 @@ class _NotificationScreenState extends State<NotificationScreen> {
     _startLiveRefreshTimer();
     if (widget.enableBackgroundProcessing) {
       _startNotificationProcessing();
+      _listenNotificationsDirect();
       FlutterForegroundTask.addTaskDataCallback(_onReceiveTaskData);
     }
   }
@@ -63,6 +70,7 @@ class _NotificationScreenState extends State<NotificationScreen> {
   @override
   void dispose() {
     _liveRefreshTimer?.cancel();
+    _notificationSubscription?.cancel();
     if (widget.enableBackgroundProcessing) {
       FlutterForegroundTask.removeTaskDataCallback(_onReceiveTaskData);
     }
@@ -121,28 +129,57 @@ class _NotificationScreenState extends State<NotificationScreen> {
     );
   }
 
-  // 백엔드에서 가계부 내역 불러오기 (최신순)
-  Future<void> _loadFromBackend() async {
-    if (_isRefreshing) return;
-    _isRefreshing = true;
+  /// UI 레이어에서 직접 알림 스트림을 수신.
+  /// 백그라운드 서비스가 놓친 결제 알림을 보완하는 역할.
+  void _listenNotificationsDirect() {
+    _notificationSubscription?.cancel();
+    _notificationSubscription = NotificationListenerService.notificationsStream
+        .listen(
+          _handleNotificationEvent,
+          onError: (e) => debugPrint('알림 스트림 에러(직접): $e'),
+          onDone: () => debugPrint('알림 스트림 종료(직접)'),
+        );
+  }
 
-    try {
-      final entries = await ApiService.getLedgerEntries();
+  Future<void> _handleNotificationEvent(ServiceNotificationEvent event) async {
+    final candidate = NotificationProcessing.candidateFromEvent(event);
+    if (candidate == null) return;
 
-      if (!mounted) return;
-      setState(() {
-        _notifications = entries
-            .map(_notificationFromEntry)
-            .where(
-              (notification) =>
-                  !_clearedNotificationKeys.contains(notification.key),
-            )
-            .toList();
-        _isLoading = false;
-      });
-    } finally {
-      _isRefreshing = false;
+    // 백그라운드 서비스 또는 이전 호출이 이미 처리한 알림은 건너뜀
+    if (_processedNotificationFingerprints.contains(candidate.fingerprint)) {
+      return;
     }
+    _processedNotificationFingerprints.add(candidate.fingerprint);
+
+    debugPrint('알림 감지(직접): ${candidate.rawText}');
+
+    if (!await ApiService.hasValidToken()) return;
+
+    final parsed = await ApiService.parseTransaction(candidate.rawText);
+    if (parsed == null) return;
+
+    final saved = await ApiService.createLedgerEntry(parsed);
+    if (!saved || !mounted) return;
+
+    await _loadFromBackend();
+  }
+
+  /// 백엔드에서 가계부 내역을 가져와 최신순으로 표시.
+  /// _isRefreshing 가드 없이 항상 즉시 실행 — 항목이 누락되는 문제 방지.
+  Future<void> _loadFromBackend() async {
+    final entries = await ApiService.getLedgerEntries();
+
+    if (!mounted) return;
+    setState(() {
+      final sorted = List<Map<String, dynamic>>.from(entries);
+      sorted.sort((a, b) {
+        final aStr = (a['transaction_at'] ?? a['created_at'] ?? '') as String;
+        final bStr = (b['transaction_at'] ?? b['created_at'] ?? '') as String;
+        return bStr.compareTo(aStr);
+      });
+      _notifications = sorted.map(_notificationFromEntry).toList();
+      _isLoading = false;
+    });
   }
 
   AppNotification _notificationFromEntry(Map<String, dynamic> entry) {
@@ -202,7 +239,6 @@ class _NotificationScreenState extends State<NotificationScreen> {
 
   /// 결제 감지 후 하루 지출 재계산 후 예산 초과면 알림창
   Future<void> _checkDailyBudgetAndAlert() async {
-    // 오늘 지출 합계 계산
     final entries = await ApiService.getLedgerEntries();
     final now = DateTime.now();
     int todaySpend = 0;
@@ -225,10 +261,8 @@ class _NotificationScreenState extends State<NotificationScreen> {
       } catch (_) {}
     }
 
-    // 오늘 지출 기록 갱신
     await ExperienceService.recordTodaySpend(todaySpend);
 
-    // 초과 여부 확인
     final exceeded = await ExperienceService.checkDailyBudgetExceeded(
       todaySpend,
     );
@@ -241,29 +275,6 @@ class _NotificationScreenState extends State<NotificationScreen> {
         MainScreen.globalKey.currentState?.changeTab(1);
       },
     );
-  }
-
-
-  IconData _getIconForCategory(String category) {
-    switch (CategoryMapper.toDisplay(category)) {
-      case '카페':
-        return Icons.local_cafe;
-      case '식비':
-        return Icons.restaurant;
-      case '쇼핑':
-        return Icons.shopping_bag;
-      case '교통':
-        return Icons.directions_car;
-      case '통신':
-        return Icons.phone_android;
-      case '이자':
-      case '급여':
-      case '용돈':
-        return Icons.monetization_on;
-      case '기타':
-      default:
-        return Icons.account_balance_wallet;
-    }
   }
 
   Future<void> _confirmClearNotifications() async {
@@ -288,20 +299,38 @@ class _NotificationScreenState extends State<NotificationScreen> {
     );
 
     if (shouldClear != true) return;
-    await _clearLocalNotifications();
+    _clearLocalNotifications();
   }
 
-  Future<void> _clearLocalNotifications() async {
+  void _clearLocalNotifications() {
     setState(() {
-      _clearedNotificationKeys.addAll(
-        _notifications.map((notification) => notification.key),
-      );
       _notifications = [];
     });
-
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(content: Text('알림 목록을 비웠습니다. 백엔드 데이터는 유지됩니다.')),
     );
+  }
+
+  IconData _getIconForCategory(String category) {
+    switch (CategoryMapper.toDisplay(category)) {
+      case '카페':
+        return Icons.local_cafe;
+      case '식비':
+        return Icons.restaurant;
+      case '쇼핑':
+        return Icons.shopping_bag;
+      case '교통':
+        return Icons.directions_car;
+      case '통신':
+        return Icons.phone_android;
+      case '이자':
+      case '급여':
+      case '용돈':
+        return Icons.monetization_on;
+      case '기타':
+      default:
+        return Icons.account_balance_wallet;
+    }
   }
 
   @override
@@ -328,9 +357,8 @@ class _NotificationScreenState extends State<NotificationScreen> {
                   ? themeDarkBlue.withValues(alpha: 0.35)
                   : themeDarkBlue,
             ),
-            onPressed: _notifications.isEmpty
-                ? null
-                : _confirmClearNotifications,
+            onPressed:
+                _notifications.isEmpty ? null : _confirmClearNotifications,
           ),
         ],
       ),
