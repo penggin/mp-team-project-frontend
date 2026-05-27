@@ -12,16 +12,26 @@ import 'login_screen.dart';
 import 'main_screen.dart';
 
 class AppNotification {
+  final String key;
   final String content;
   final String category;
 
-  AppNotification({required this.content, required this.category});
+  AppNotification({
+    required this.key,
+    required this.content,
+    required this.category,
+  });
 }
 
 class NotificationScreen extends StatefulWidget {
   final bool enableBackgroundProcessing;
+  final PaymentPushNotificationService? pushNotificationService;
 
-  const NotificationScreen({super.key, this.enableBackgroundProcessing = true});
+  const NotificationScreen({
+    super.key,
+    this.enableBackgroundProcessing = true,
+    this.pushNotificationService,
+  });
 
   @override
   State<NotificationScreen> createState() => _NotificationScreenState();
@@ -34,6 +44,7 @@ class _NotificationScreenState extends State<NotificationScreen> {
   final Color themeDarkBlue = const Color(0xFF1E105C);
 
   List<AppNotification> _notifications = [];
+  final Set<String> _clearedNotificationKeys = {};
   bool _isLoading = true;
   bool _isRefreshing = false;
   Timer? _liveRefreshTimer;
@@ -89,8 +100,19 @@ class _NotificationScreenState extends State<NotificationScreen> {
   }
 
   Future<void> _startForegroundService() async {
-    if (await FlutterForegroundTask.isRunningService) return;
-    await PaymentPushNotificationService.instance.requestPermissions();
+    await (widget.pushNotificationService ??
+            PaymentPushNotificationService.instance)
+        .requestPermissions();
+    if (await FlutterForegroundTask.isRunningService) {
+      await FlutterForegroundTask.updateService(
+        notificationTitle: '가계부 키우기',
+        notificationText: '결제 내역을 자동으로 기록 중',
+        callback: startCallback,
+      );
+      await FlutterForegroundTask.restartService();
+      return;
+    }
+
     await FlutterForegroundTask.startService(
       serviceId: 256,
       notificationTitle: '가계부 키우기',
@@ -110,13 +132,10 @@ class _NotificationScreenState extends State<NotificationScreen> {
       if (!mounted) return;
       setState(() {
         _notifications = entries
-            .map(
-              (entry) => AppNotification(
-                content: _notificationContentForEntry(entry),
-                category: CategoryMapper.toDisplay(
-                  entry['category']?.toString(),
-                ),
-              ),
+            .map(_notificationFromEntry)
+            .where(
+              (notification) =>
+                  !_clearedNotificationKeys.contains(notification.key),
             )
             .toList();
         _isLoading = false;
@@ -124,6 +143,29 @@ class _NotificationScreenState extends State<NotificationScreen> {
     } finally {
       _isRefreshing = false;
     }
+  }
+
+  AppNotification _notificationFromEntry(Map<String, dynamic> entry) {
+    return AppNotification(
+      key: _notificationKeyForEntry(entry),
+      content: _notificationContentForEntry(entry),
+      category: CategoryMapper.toDisplay(entry['category']?.toString()),
+    );
+  }
+
+  String _notificationKeyForEntry(Map<String, dynamic> entry) {
+    final id = _nonEmptyString(entry['id']);
+    if (id != null) return id;
+
+    return [
+      entry['type'],
+      entry['amount'],
+      entry['category'],
+      entry['merchant_name'],
+      entry['transaction_at'],
+      entry['created_at'],
+      entry['raw_text'],
+    ].map((value) => value?.toString().trim() ?? '').join('|');
   }
 
   String _notificationContentForEntry(Map<String, dynamic> entry) {
@@ -250,6 +292,9 @@ class _NotificationScreenState extends State<NotificationScreen> {
 
   Future<void> _clearLocalNotifications() async {
     setState(() {
+      _clearedNotificationKeys.addAll(
+        _notifications.map((notification) => notification.key),
+      );
       _notifications = [];
     });
 
