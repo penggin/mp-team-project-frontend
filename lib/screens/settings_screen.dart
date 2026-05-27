@@ -3,6 +3,8 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import '../app_colors.dart';
 import '../services/experience_service.dart';
+import '../services/api_service.dart';
+import 'login_screen.dart';
 
 // --- 설정 화면 위젯 ---
 class SettingsScreen extends StatefulWidget {
@@ -15,16 +17,51 @@ class SettingsScreen extends StatefulWidget {
 class _SettingsScreenState extends State<SettingsScreen> {
   bool isNotificationOn = true;
   int _monthlyBudget = 0;
+  Map<String, dynamic>? _userProfile;
+  bool _isLoadingUserProfile = true;
+  bool _isDemoModeEnabled = false;
 
   @override
   void initState() {
     super.initState();
     _loadBudget();
+    _loadUserProfile();
+    _loadDemoMode();
   }
 
   Future<void> _loadBudget() async {
     final budget = await ExperienceService.getMonthlyBudget();
     if (mounted) setState(() => _monthlyBudget = budget);
+  }
+
+  Future<void> _loadUserProfile() async {
+    final profile = await ApiService.getCurrentUser();
+    if (!mounted) return;
+    setState(() {
+      _userProfile = profile;
+      _isLoadingUserProfile = false;
+    });
+  }
+
+  Future<void> _loadDemoMode() async {
+    final enabled = await ExperienceService.loadDemoMode();
+    if (mounted) setState(() => _isDemoModeEnabled = enabled);
+  }
+
+  Future<void> _setDemoModeEnabled(bool enabled) async {
+    setState(() => _isDemoModeEnabled = enabled);
+    await ExperienceService.setDemoModeEnabled(enabled);
+  }
+
+  String get _displayNickname {
+    if (_isLoadingUserProfile) return '불러오는 중...';
+    final nickname = _userProfile?['nickname']?.toString().trim();
+    return nickname == null || nickname.isEmpty ? '알 수 없음' : nickname;
+  }
+
+  String get _displayEmail {
+    final email = _userProfile?['email']?.toString().trim();
+    return email == null || email.isEmpty ? '내 정보 수정' : email;
   }
 
   void _showBudgetDialog(ThemeColors colors) {
@@ -80,10 +117,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ),
           TextButton(
             onPressed: () => Navigator.pop(ctx),
-            child: Text(
-              '취소',
-              style: TextStyle(color: colors.subText),
-            ),
+            child: Text('취소', style: TextStyle(color: colors.subText)),
           ),
         ],
       ),
@@ -105,7 +139,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
       builder: (context) {
         return AlertDialog(
           backgroundColor: colors.background, // ✅ 테마 적용
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(15),
+          ),
           title: Center(
             child: Text(
               title,
@@ -172,14 +208,20 @@ class _SettingsScreenState extends State<SettingsScreen> {
               onTap: () {
                 Navigator.push(
                   context,
-                  MaterialPageRoute(builder: (context) => const InfoEditScreen()),
-                );
+                  MaterialPageRoute(
+                    builder: (context) =>
+                        InfoEditScreen(userProfile: _userProfile),
+                  ),
+                ).then((_) => _loadUserProfile());
               },
               borderRadius: BorderRadius.circular(15),
               child: Container(
                 padding: const EdgeInsets.all(20),
                 decoration: BoxDecoration(
-                  border: Border.all(color: colors.cardBackground, width: 2), // ✅ 테마 적용
+                  border: Border.all(
+                    color: colors.cardBackground,
+                    width: 2,
+                  ), // ✅ 테마 적용
                   borderRadius: BorderRadius.circular(15),
                 ),
                 child: Row(
@@ -187,7 +229,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     CircleAvatar(
                       radius: 30,
                       backgroundColor: colors.cardBackground, // ✅ 테마 적용
-                      child: Icon(Icons.person, size: 35, color: colors.primaryText), // ✅ 테마 적용
+                      child: Icon(
+                        Icons.person,
+                        size: 35,
+                        color: colors.primaryText,
+                      ), // ✅ 테마 적용
                     ),
                     const SizedBox(width: 15),
                     Expanded(
@@ -195,7 +241,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            '알 수 없음',
+                            _displayNickname,
                             style: TextStyle(
                               fontSize: 18,
                               fontWeight: FontWeight.bold,
@@ -204,7 +250,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           ),
                           const SizedBox(height: 5),
                           Text(
-                            '내 정보 수정',
+                            _displayEmail,
                             style: TextStyle(
                               fontSize: 13,
                               color: colors.subText, // ✅ 테마 적용
@@ -213,7 +259,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         ],
                       ),
                     ),
-                    Icon(Icons.arrow_forward_ios, color: colors.primaryText, size: 18), // ✅ 테마 적용
+                    Icon(
+                      Icons.arrow_forward_ios,
+                      color: colors.primaryText,
+                      size: 18,
+                    ), // ✅ 테마 적용
                   ],
                 ),
               ),
@@ -223,19 +273,22 @@ class _SettingsScreenState extends State<SettingsScreen> {
             // 2. 알림 및 화면 테마 설정 그룹
             Container(
               decoration: BoxDecoration(
-                  border: Border.all(color: colors.cardBackground, width: 2),
-                  borderRadius: BorderRadius.circular(15),
+                border: Border.all(color: colors.cardBackground, width: 2),
+                borderRadius: BorderRadius.circular(15),
               ),
               child: Column(
                 children: [
                   ListTile(
                     title: Text(
                       '알림',
-                      style: TextStyle(color: colors.primaryText, fontWeight: FontWeight.w600), // ✅ 테마 적용
+                      style: TextStyle(
+                        color: colors.primaryText,
+                        fontWeight: FontWeight.w600,
+                      ), // ✅ 테마 적용
                     ),
                     trailing: Switch(
                       value: isNotificationOn,
-                      activeColor: colors.primaryText,       // ✅ 테마 적용
+                      activeThumbColor: colors.primaryText, // ✅ 테마 적용
                       activeTrackColor: colors.cardBackground, // ✅ 테마 적용
                       onChanged: (value) {
                         setState(() {
@@ -244,19 +297,56 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       },
                     ),
                   ),
-                  Divider(color: colors.cardBackground, height: 1, thickness: 1), // ✅ 테마 적용
+                  Divider(
+                    color: colors.cardBackground,
+                    height: 1,
+                    thickness: 1,
+                  ), // ✅ 테마 적용
+                  ListTile(
+                    title: Text(
+                      '데모 모드',
+                      style: TextStyle(
+                        color: colors.primaryText,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    subtitle: Text(
+                      '홈에서 진화 테스트 버튼을 표시합니다',
+                      style: TextStyle(color: colors.subText),
+                    ),
+                    trailing: Switch(
+                      value: _isDemoModeEnabled,
+                      activeThumbColor: colors.primaryText,
+                      activeTrackColor: colors.cardBackground,
+                      onChanged: _setDemoModeEnabled,
+                    ),
+                  ),
+                  Divider(
+                    color: colors.cardBackground,
+                    height: 1,
+                    thickness: 1,
+                  ),
                   ListTile(
                     onTap: () {
                       Navigator.push(
                         context,
-                        MaterialPageRoute(builder: (context) => const ThemeSettingsScreen()),
+                        MaterialPageRoute(
+                          builder: (context) => const ThemeSettingsScreen(),
+                        ),
                       );
                     },
                     title: Text(
                       '화면 테마',
-                      style: TextStyle(color: colors.primaryText, fontWeight: FontWeight.w600), // ✅ 테마 적용
+                      style: TextStyle(
+                        color: colors.primaryText,
+                        fontWeight: FontWeight.w600,
+                      ), // ✅ 테마 적용
                     ),
-                    trailing: Icon(Icons.arrow_forward_ios, color: colors.primaryText, size: 18), // ✅ 테마 적용
+                    trailing: Icon(
+                      Icons.arrow_forward_ios,
+                      color: colors.primaryText,
+                      size: 18,
+                    ), // ✅ 테마 적용
                   ),
                 ],
               ),
@@ -286,8 +376,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       style: TextStyle(color: colors.subText),
                     ),
                     const SizedBox(width: 4),
-                    Icon(Icons.arrow_forward_ios,
-                        color: colors.primaryText, size: 18),
+                    Icon(
+                      Icons.arrow_forward_ios,
+                      color: colors.primaryText,
+                      size: 18,
+                    ),
                   ],
                 ),
               ),
@@ -297,7 +390,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
             // 4. 보안 및 계정 관리 그룹
             Container(
               decoration: BoxDecoration(
-                border: Border.all(color: colors.cardBackground, width: 2), // ✅ 테마 적용
+                border: Border.all(
+                  color: colors.cardBackground,
+                  width: 2,
+                ), // ✅ 테마 적용
                 borderRadius: BorderRadius.circular(15),
               ),
               child: Column(
@@ -306,42 +402,85 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     onTap: () {
                       Navigator.push(
                         context,
-                        MaterialPageRoute(builder: (context) => const PasswordSecurityScreen()),
+                        MaterialPageRoute(
+                          builder: (context) => const PasswordSecurityScreen(),
+                        ),
                       );
                     },
                     title: Text(
                       '비밀번호 및 보안',
-                      style: TextStyle(color: colors.primaryText, fontWeight: FontWeight.w600), // ✅ 테마 적용
+                      style: TextStyle(
+                        color: colors.primaryText,
+                        fontWeight: FontWeight.w600,
+                      ), // ✅ 테마 적용
                     ),
-                    trailing: Icon(Icons.arrow_forward_ios, color: colors.primaryText, size: 18), // ✅ 테마 적용
+                    trailing: Icon(
+                      Icons.arrow_forward_ios,
+                      color: colors.primaryText,
+                      size: 18,
+                    ), // ✅ 테마 적용
                   ),
-                  Divider(color: colors.cardBackground, height: 1, thickness: 1),
+                  Divider(
+                    color: colors.cardBackground,
+                    height: 1,
+                    thickness: 1,
+                  ),
                   ListTile(
                     onTap: () {
-                      _showConfirmDialog('로그아웃을 진행하시겠습니까?', () {
-                        // TODO: 실제 로그아웃 처리 후 로그인 화면으로 이동
-                        Navigator.pop(context); // 팝업 닫기 임시 처리
+                      _showConfirmDialog('로그아웃을 진행하시겠습니까?', () async {
+                        final navigator = Navigator.of(context);
+                        navigator.pop();
+                        await ApiService.logout();
+                        if (!mounted) return;
+                        navigator.pushAndRemoveUntil(
+                          MaterialPageRoute(
+                            builder: (context) => const LoginScreen(),
+                          ),
+                          (_) => false,
+                        );
                       });
                     },
                     title: Text(
                       '로그아웃',
-                      style: TextStyle(color: colors.primaryText, fontWeight: FontWeight.w600), // ✅ 테마 적용
+                      style: TextStyle(
+                        color: colors.primaryText,
+                        fontWeight: FontWeight.w600,
+                      ), // ✅ 테마 적용
                     ),
-                    trailing: Icon(Icons.arrow_forward_ios, color: colors.primaryText, size: 18), // ✅ 테마 적용
+                    trailing: Icon(
+                      Icons.arrow_forward_ios,
+                      color: colors.primaryText,
+                      size: 18,
+                    ), // ✅ 테마 적용
                   ),
-                  Divider(color: colors.cardBackground, height: 1, thickness: 1), // ✅ 테마 적용
+                  Divider(
+                    color: colors.cardBackground,
+                    height: 1,
+                    thickness: 1,
+                  ), // ✅ 테마 적용
                   ListTile(
                     onTap: () {
                       _showConfirmDialog('탈퇴를 진행하시겠습니까?', () {
-                        // TODO: 실제 탈퇴 처리 로직
-                        Navigator.pop(context); // 팝업 닫기 임시 처리
+                        Navigator.pop(context);
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('회원 탈퇴 API가 아직 제공되지 않았습니다'),
+                          ),
+                        );
                       });
                     },
                     title: Text(
                       '탈퇴하기',
-                      style: TextStyle(color: colors.primaryText, fontWeight: FontWeight.w600), // ✅ 테마 적용
+                      style: TextStyle(
+                        color: colors.primaryText,
+                        fontWeight: FontWeight.w600,
+                      ), // ✅ 테마 적용
                     ),
-                    trailing: Icon(Icons.arrow_forward_ios, color: colors.primaryText, size: 18), // ✅ 테마 적용
+                    trailing: Icon(
+                      Icons.arrow_forward_ios,
+                      color: colors.primaryText,
+                      size: 18,
+                    ), // ✅ 테마 적용
                   ),
                 ],
               ),
@@ -356,7 +495,23 @@ class _SettingsScreenState extends State<SettingsScreen> {
 // --- 1. 내 정보 수정 메인 화면 (Frame 4) ---
 // --- 1. 내 정보 수정 화면 ---
 class InfoEditScreen extends StatelessWidget {
-  const InfoEditScreen({super.key});
+  final Map<String, dynamic>? userProfile;
+
+  const InfoEditScreen({super.key, this.userProfile});
+
+  String _profileValue(String key, String fallback) {
+    final value = userProfile?[key]?.toString().trim();
+    if (value == null || value.isEmpty) return fallback;
+    return value;
+  }
+
+  String _dateValue(String key) {
+    final raw = userProfile?[key]?.toString();
+    if (raw == null || raw.isEmpty) return '알 수 없음';
+    final parsed = DateTime.tryParse(raw)?.toLocal();
+    if (parsed == null) return raw;
+    return '${parsed.year}. ${parsed.month.toString().padLeft(2, '0')}. ${parsed.day.toString().padLeft(2, '0')}';
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -389,7 +544,11 @@ class InfoEditScreen extends StatelessWidget {
                 CircleAvatar(
                   radius: 50,
                   backgroundColor: colors.cardBackground,
-                  child: Icon(Icons.person, size: 60, color: colors.primaryText),
+                  child: Icon(
+                    Icons.person,
+                    size: 60,
+                    color: colors.primaryText,
+                  ),
                 ),
                 Positioned(
                   bottom: 0,
@@ -404,11 +563,26 @@ class InfoEditScreen extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 30),
-          _buildInfoTile(context, '이름', '알 수 없음', colors),
-          _buildInfoTile(context, '영문 이름', 'Unknown', colors),
-          _buildInfoTile(context, '생년월일', '2000. 01. 01', colors),
-          _buildInfoTile(context, '휴대폰 번호', '010-1234-5678', colors),
-          _buildInfoTile(context, '이메일', 'Unknown@gachon.ac.kr', colors),
+          _buildInfoTile(
+            context,
+            '닉네임',
+            _profileValue('nickname', '알 수 없음'),
+            colors,
+          ),
+          _buildInfoTile(
+            context,
+            '이메일',
+            _profileValue('email', '알 수 없음'),
+            colors,
+          ),
+          _buildInfoTile(
+            context,
+            '사용자 ID',
+            _profileValue('id', '알 수 없음'),
+            colors,
+          ),
+          _buildInfoTile(context, '가입일', _dateValue('created_at'), colors),
+          _buildInfoTile(context, '최근 수정일', _dateValue('updated_at'), colors),
         ],
       ),
     );
@@ -416,19 +590,15 @@ class InfoEditScreen extends StatelessWidget {
 
   // ✅ _buildInfoTile은 build() 밖, 클래스 안에 위치
   Widget _buildInfoTile(
-      BuildContext context,
-      String label,
-      String value,
-      ThemeColors colors,
-      ) {
+    BuildContext context,
+    String label,
+    String value,
+    ThemeColors colors,
+  ) {
     return ListTile(
       onTap: () {
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (context) =>
-                ValueEditScreen(title: label, initialValue: value),
-          ),
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('내 정보 수정 API가 아직 제공되지 않았습니다')),
         );
       },
       title: Row(
@@ -441,17 +611,17 @@ class InfoEditScreen extends StatelessWidget {
               color: colors.primaryText,
             ),
           ),
-          Text(
-            value,
-            style: TextStyle(color: colors.subText),
-          ),
+          Text(value, style: TextStyle(color: colors.subText)),
         ],
       ),
-      trailing: Icon(Icons.arrow_forward_ios, size: 16, color: colors.primaryText),
+      trailing: Icon(
+        Icons.arrow_forward_ios,
+        size: 16,
+        color: colors.primaryText,
+      ),
     );
   }
 }
-
 
 // --- 2. 세부 정보 수정 입력 화면 ---
 class ValueEditScreen extends StatelessWidget {
@@ -512,10 +682,7 @@ class ValueEditScreen extends StatelessWidget {
                   ),
                 ),
                 focusedBorder: UnderlineInputBorder(
-                  borderSide: BorderSide(
-                    color: colors.primaryText,
-                    width: 2,
-                  ),
+                  borderSide: BorderSide(color: colors.primaryText, width: 2),
                 ),
               ),
             ),
@@ -542,7 +709,6 @@ class ValueEditScreen extends StatelessWidget {
     );
   }
 }
-
 
 // --- 3. 화면 테마 설정 화면 (Frame 3) ---
 // --- 테마 설정 화면 ---
@@ -605,18 +771,20 @@ class _ThemeSettingsScreenState extends State<ThemeSettingsScreen> {
                   mainAxisAlignment: MainAxisAlignment.center,
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    ...AppThemeType.values.asMap().entries.map((entry) {
-                      final index = entry.key;
-                      final themeType = entry.value;
-                      return index != 0
-                          ? [
-                        const SizedBox(width: 20),
-                        _buildThemeOption(index, themeType, colors),
-                      ]
-                          : [
-                        _buildThemeOption(index, themeType, colors),
-                      ];
-                    }).expand((e) => e),
+                    ...AppThemeType.values
+                        .asMap()
+                        .entries
+                        .map((entry) {
+                          final index = entry.key;
+                          final themeType = entry.value;
+                          return index != 0
+                              ? [
+                                  const SizedBox(width: 20),
+                                  _buildThemeOption(index, themeType, colors),
+                                ]
+                              : [_buildThemeOption(index, themeType, colors)];
+                        })
+                        .expand((e) => e),
                   ],
                 ),
               ),
@@ -648,7 +816,11 @@ class _ThemeSettingsScreenState extends State<ThemeSettingsScreen> {
     );
   }
 
-  Widget _buildThemeOption(int index, AppThemeType themeType, ThemeColors colors) {
+  Widget _buildThemeOption(
+    int index,
+    AppThemeType themeType,
+    ThemeColors colors,
+  ) {
     // ✅ AppColors.of() 전역 함수로 미리보기 색상 가져오기
     final previewColors = AppColors.of(themeType);
     // ✅ AppColors.labelOf() 전역 함수로 테마 이름 가져오기
@@ -663,8 +835,8 @@ class _ThemeSettingsScreenState extends State<ThemeSettingsScreen> {
           children: [
             Container(
               height: 200,
-          width: double.infinity,
-          decoration: BoxDecoration(
+              width: double.infinity,
+              decoration: BoxDecoration(
                 border: Border.all(
                   color: selectedThemeIndex == index
                       ? colors.primaryText
@@ -697,12 +869,12 @@ class _ThemeSettingsScreenState extends State<ThemeSettingsScreen> {
               ),
             ),
             const SizedBox(height: 10),
-        Center(
-          child: Icon(
-            selectedThemeIndex == index
-                ? Icons.check_circle
-                : Icons.radio_button_unchecked,
-            color: colors.primaryText,
+            Center(
+              child: Icon(
+                selectedThemeIndex == index
+                    ? Icons.check_circle
+                    : Icons.radio_button_unchecked,
+                color: colors.primaryText,
               ),
             ),
           ],
@@ -711,7 +883,6 @@ class _ThemeSettingsScreenState extends State<ThemeSettingsScreen> {
     );
   }
 }
-
 
 // --- 비밀번호 및 보안 화면 (Frame 6) ---
 class PasswordSecurityScreen extends StatelessWidget {
@@ -799,7 +970,7 @@ class PasswordSecurityScreen extends StatelessWidget {
                 },
                 style: ElevatedButton.styleFrom(
                   backgroundColor: colors.cardBackground, // ✅ 테마 적용
-                  foregroundColor: colors.primaryText,    // ✅ 테마 적용
+                  foregroundColor: colors.primaryText, // ✅ 테마 적용
                   padding: const EdgeInsets.symmetric(vertical: 16),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(15),
@@ -840,7 +1011,10 @@ class PasswordSecurityScreen extends StatelessWidget {
             width: 2,
           ),
         ),
-        contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 15),
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 20,
+          vertical: 15,
+        ),
       ),
     );
   }

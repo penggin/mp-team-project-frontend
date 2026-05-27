@@ -1,15 +1,8 @@
-import 'package:first/screens/main_payment_screen.dart';
-import 'package:first/screens/settings_screen.dart';
-import 'package:first/screens/statistics_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../app_colors.dart';
-import 'main_screen.dart';
 import 'ledger_screen.dart';
-import 'settings_screen.dart';
-import 'category_payment_screen.dart';
-import 'main_payment_screen.dart';
-import 'statistics_screen.dart';
+import 'main_screen.dart';
 
 // ══════════════════════════════════════════════════════════════
 // AppDrawer — 앱 전역 슬라이드 드로어
@@ -49,7 +42,11 @@ class AppDrawer extends StatelessWidget {
                       color: colors.cardBackground,
                       shape: BoxShape.circle,
                     ),
-                    child: Icon(Icons.close, color: colors.primaryText, size: 20),
+                    child: Icon(
+                      Icons.close,
+                      color: colors.primaryText,
+                      size: 20,
+                    ),
                   ),
                 ),
               ),
@@ -77,10 +74,10 @@ class AppDrawer extends StatelessWidget {
                     label: '월간 결제 이력',
                     icon: Icons.calendar_month_outlined,
                     onTap: () {
-                      Navigator.pop(context);
+                      final navigator = Navigator.of(context);
+                      navigator.pop();
                       Future.delayed(const Duration(milliseconds: 300), () {
-                        Navigator.push(
-                          context,
+                        navigator.push(
                           MaterialPageRoute(
                             builder: (_) => const LedgerScreenWrapper(),
                           ),
@@ -103,7 +100,9 @@ class AppDrawer extends StatelessWidget {
                     label: '카테고리별 결제이력',
                     icon: Icons.pie_chart_outline,
                     onTap: () => _navigate(context, () {
-                      MainScreen.globalKey.currentState?.changeTabWithRefresh(4);
+                      MainScreen.globalKey.currentState?.changeTabWithRefresh(
+                        4,
+                      );
                     }),
                   ),
                   _tile(
@@ -136,8 +135,8 @@ class AppDrawer extends StatelessWidget {
       child: InkWell(
         onTap: onTap,
         borderRadius: BorderRadius.circular(14),
-        splashColor: colors.primaryText.withOpacity(0.06),
-        highlightColor: colors.primaryText.withOpacity(0.04),
+        splashColor: colors.primaryText.withValues(alpha: 0.06),
+        highlightColor: colors.primaryText.withValues(alpha: 0.04),
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
           child: Row(

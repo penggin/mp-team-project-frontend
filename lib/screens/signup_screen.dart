@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import '../services/api_service.dart';
 
 class SignUpScreen extends StatefulWidget {
-  const SignUpScreen({Key? key}) : super(key: key);
+  const SignUpScreen({super.key});
 
   @override
   State<SignUpScreen> createState() => _SignUpScreenState();
@@ -14,7 +14,8 @@ class _SignUpScreenState extends State<SignUpScreen> {
 
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
-  final TextEditingController _passwordCheckController = TextEditingController();
+  final TextEditingController _passwordCheckController =
+      TextEditingController();
   final TextEditingController _nicknameController = TextEditingController();
 
   bool _isLoading = false;
@@ -65,24 +66,27 @@ class _SignUpScreenState extends State<SignUpScreen> {
   }
 
   void _showSnackBar(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message)),
-    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
   }
 
   Widget _buildInputField(
-      String label,
-      TextEditingController controller, {
-        bool isObscure = false,
-      }) {
+    String label,
+    TextEditingController controller, {
+    bool isObscure = false,
+  }) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(label,
-            style: TextStyle(
-                fontWeight: FontWeight.bold,
-                fontSize: 16,
-                color: themeDarkBlue)),
+        Text(
+          label,
+          style: TextStyle(
+            fontWeight: FontWeight.bold,
+            fontSize: 16,
+            color: themeDarkBlue,
+          ),
+        ),
         const SizedBox(height: 8),
         TextField(
           controller: controller,
@@ -98,8 +102,10 @@ class _SignUpScreenState extends State<SignUpScreen> {
               borderRadius: BorderRadius.circular(15),
               borderSide: BorderSide(color: themeDarkBlue, width: 2),
             ),
-            contentPadding:
-            const EdgeInsets.symmetric(horizontal: 20, vertical: 15),
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: 20,
+              vertical: 15,
+            ),
           ),
         ),
         const SizedBox(height: 20),
@@ -115,9 +121,10 @@ class _SignUpScreenState extends State<SignUpScreen> {
         backgroundColor: Colors.white,
         elevation: 0,
         iconTheme: IconThemeData(color: themeDarkBlue),
-        title: Text('회원가입',
-            style: TextStyle(
-                color: themeDarkBlue, fontWeight: FontWeight.bold)),
+        title: Text(
+          '회원가입',
+          style: TextStyle(color: themeDarkBlue, fontWeight: FontWeight.bold),
+        ),
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(1.0),
           child: Container(color: themeDarkBlue, height: 1.5),
@@ -130,10 +137,16 @@ class _SignUpScreenState extends State<SignUpScreen> {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               _buildInputField('Email', _emailController),
-              _buildInputField('Password (8자 이상)', _passwordController,
-                  isObscure: true),
-              _buildInputField('Check Password', _passwordCheckController,
-                  isObscure: true),
+              _buildInputField(
+                'Password (8자 이상)',
+                _passwordController,
+                isObscure: true,
+              ),
+              _buildInputField(
+                'Check Password',
+                _passwordCheckController,
+                isObscure: true,
+              ),
               _buildInputField('Nickname', _nicknameController),
               const SizedBox(height: 20),
               ElevatedButton(
@@ -149,9 +162,13 @@ class _SignUpScreenState extends State<SignUpScreen> {
                 ),
                 child: _isLoading
                     ? const CircularProgressIndicator()
-                    : const Text('Sign Up',
-                    style: TextStyle(
-                        fontWeight: FontWeight.bold, fontSize: 16)),
+                    : const Text(
+                        'Sign Up',
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 16,
+                        ),
+                      ),
               ),
             ],
           ),

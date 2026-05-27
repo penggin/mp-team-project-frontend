@@ -39,7 +39,18 @@ class _HomeScreenState extends State<HomeScreen> {
   int _todaySpend = 0;
   int _monthlyBudget = 0;
   int _monthlySpend = 0;
+  int _totalExp = 0;
   bool _evolutionPending = false;
+  bool _usesBackendPetState = false;
+  bool _isDemoModeEnabled = false;
+  bool _isAddingDemoExp = false;
+  bool _isResettingDemoExp = false;
+  String? _petName;
+  String? _petSpecies;
+  int? _petMood;
+  int? _petHealth;
+  int? _petCleanliness;
+  int? _petCoins;
 
   // 일일 예산 관련
   int _dailyBaseBudget = 0;
@@ -64,25 +75,20 @@ class _HomeScreenState extends State<HomeScreen> {
   void initState() {
     super.initState();
     _requestPermissions();
-    _loadAll().then((_) {
-      if (mounted) _startXpTimer();
+    _isDemoModeEnabled = ExperienceService.demoModeEnabled.value;
+    ExperienceService.demoModeEnabled.addListener(_onDemoModeChanged);
+    ExperienceService.loadDemoMode();
+    _loadAll().then((usesBackendPetState) {
+      if (mounted && !usesBackendPetState) _startXpTimer();
     });
     _initVideoController(_level);
   }
 
-  Future<void> _loadDailyBudget() async {
-    final base = await ExperienceService.getDailyBaseBudget();
-    final carryover = await ExperienceService.getCarryoverAmount();
-    if (!mounted) return;
-    setState(() {
-      _dailyBaseBudget = base;
-      _carryover = carryover;
-    });
-  }
-
   Future<void> _checkAndShowBudgetAlert() async {
     if (_budgetAlertShown) return;
-    final exceeded = await ExperienceService.checkDailyBudgetExceeded(_todaySpend);
+    final exceeded = await ExperienceService.checkDailyBudgetExceeded(
+      _todaySpend,
+    );
     if (!exceeded || !mounted) return;
     _budgetAlertShown = true;
     BudgetAlertDialog.show(
@@ -98,18 +104,28 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void dispose() {
     _xpTimer?.cancel();
+    ExperienceService.demoModeEnabled.removeListener(_onDemoModeChanged);
     _videoController.dispose();
     super.dispose();
+  }
+
+  void _onDemoModeChanged() {
+    if (!mounted) return;
+    setState(() {
+      _isDemoModeEnabled = ExperienceService.demoModeEnabled.value;
+    });
   }
 
   // ── 실시간 XP 타이머 ──────────────────────────────────────────
 
   void _startXpTimer() {
+    if (_usesBackendPetState) return;
     _xpTimer?.cancel();
     _xpTimer = Timer.periodic(const Duration(seconds: 1), (_) => _tickXp());
   }
 
   Future<void> _tickXp() async {
+    if (_usesBackendPetState) return;
     if (_ticking || !mounted) return;
     _ticking = true;
     try {
@@ -121,11 +137,13 @@ class _HomeScreenState extends State<HomeScreen> {
 
       if (!mounted) return;
 
-      final shouldEvolve = _crossedEvolution(_level, newLevel) && !_evolutionPending;
+      final shouldEvolve =
+          _crossedEvolution(_level, newLevel) && !_evolutionPending;
 
       setState(() {
         _prevLevel = _level;
         _level = newLevel;
+        _totalExp = totalExp;
         _expProgress = ExperienceService.expProgress(totalExp);
         _monthlyBudget = monthlyBudget;
         if (shouldEvolve) _evolutionPending = true;
@@ -133,7 +151,9 @@ class _HomeScreenState extends State<HomeScreen> {
 
       if (shouldEvolve) {
         _xpTimer?.cancel(); // 진화 중 타이머 일시 정지
-        WidgetsBinding.instance.addPostFrameCallback((_) => _triggerEvolution());
+        WidgetsBinding.instance.addPostFrameCallback(
+          (_) => _triggerEvolution(),
+        );
       }
     } finally {
       _ticking = false;
@@ -153,8 +173,12 @@ class _HomeScreenState extends State<HomeScreen> {
       });
   }
 
-  Future<void> _loadAll() async {
-    await ExperienceService.addTimeBasedExp();
+  Future<bool> _loadAll() async {
+    final petState = await ApiService.getPetState();
+    final usesBackendPetState = petState != null;
+    if (!usesBackendPetState) {
+      await ExperienceService.addTimeBasedExp();
+    }
 
     final entries = await ApiService.getLedgerEntries();
     final now = DateTime.now();
@@ -164,10 +188,11 @@ class _HomeScreenState extends State<HomeScreen> {
     for (final entry in entries) {
       if ((entry['type'] as String? ?? '') != 'expense') continue;
       final amount = (entry['amount'] as num?)?.toInt() ?? 0;
-      final txAtStr = (entry['transaction_at'] as String? ??
-              entry['created_at'] as String? ??
-              '')
-          .trim();
+      final txAtStr =
+          (entry['transaction_at'] as String? ??
+                  entry['created_at'] as String? ??
+                  '')
+              .trim();
       if (txAtStr.isEmpty) continue;
       try {
         final txAt = DateTime.parse(txAtStr).toLocal();
@@ -178,32 +203,57 @@ class _HomeScreenState extends State<HomeScreen> {
       } catch (_) {}
     }
 
-    await ExperienceService.applyDailyPenalty(todaySpend);
     await ExperienceService.recordTodaySpend(todaySpend);
+    if (!usesBackendPetState) {
+      await ExperienceService.applyDailyPenalty(todaySpend);
+    }
 
-    final totalExp = await ExperienceService.getTotalExp();
+    final totalExp = usesBackendPetState
+        ? _intValue(petState['exp']) ?? 0
+        : await ExperienceService.getTotalExp();
     final monthlyBudget = await ExperienceService.getMonthlyBudget();
-    final newLevel = ExperienceService.levelFromExp(totalExp);
     final dailyBase = await ExperienceService.getDailyBaseBudget();
     final carryover = await ExperienceService.getCarryoverAmount();
+    final newLevel =
+        (usesBackendPetState ? _intValue(petState['level']) : null) ??
+        ExperienceService.levelFromExp(totalExp);
 
-    if (!mounted) return;
+    if (!mounted) return usesBackendPetState;
 
-    final shouldEvolve = _crossedEvolution(_prevLevel, newLevel) && !_evolutionPending;
+    final shouldEvolve =
+        _crossedEvolution(_prevLevel, newLevel) && !_evolutionPending;
 
     setState(() {
       _prevLevel = _level;
       _level = newLevel;
+      _totalExp = totalExp;
       _expProgress = ExperienceService.expProgress(totalExp);
       _todaySpend = todaySpend;
       _monthlyBudget = monthlyBudget;
       _monthlySpend = monthlySpend;
       _dailyBaseBudget = dailyBase;
       _carryover = carryover;
+      _usesBackendPetState = usesBackendPetState;
+      _petName = usesBackendPetState
+          ? _stringValue(petState['name'])
+          : _petName;
+      _petSpecies = usesBackendPetState
+          ? _stringValue(petState['species'])
+          : _petSpecies;
+      _petMood = usesBackendPetState ? _intValue(petState['mood']) : _petMood;
+      _petHealth = usesBackendPetState
+          ? _intValue(petState['health'])
+          : _petHealth;
+      _petCleanliness = usesBackendPetState
+          ? _intValue(petState['cleanliness'])
+          : _petCleanliness;
+      _petCoins = usesBackendPetState
+          ? _intValue(petState['coins'])
+          : _petCoins;
       if (shouldEvolve) _evolutionPending = true;
     });
 
-    // 하루 예산 초과 여부 체크
+    if (usesBackendPetState) _xpTimer?.cancel();
     if (mounted) await _checkAndShowBudgetAlert();
 
     if (shouldEvolve) {
@@ -211,6 +261,19 @@ class _HomeScreenState extends State<HomeScreen> {
     } else {
       _refreshCharacterIfNeeded(newLevel);
     }
+    return usesBackendPetState;
+  }
+
+  int? _intValue(Object? value) {
+    if (value is int) return value;
+    if (value is num) return value.toInt();
+    return int.tryParse(value?.toString() ?? '');
+  }
+
+  String? _stringValue(Object? value) {
+    final text = value?.toString().trim();
+    if (text == null || text.isEmpty) return null;
+    return text;
   }
 
   void _refreshCharacterIfNeeded(int newLevel) {
@@ -218,6 +281,65 @@ class _HomeScreenState extends State<HomeScreen> {
     if (_videoController.dataSource.contains(needed.split('/').last)) return;
     _videoController.dispose();
     _initVideoController(newLevel);
+  }
+
+  Future<void> _addDemoExperience() async {
+    if (_isAddingDemoExp || !_isDemoModeEnabled) return;
+
+    setState(() => _isAddingDemoExp = true);
+    try {
+      final nextTotalExp = _usesBackendPetState
+          ? (_totalExp + ExperienceService.xpPerLevel)
+          : await ExperienceService.addDemoExp();
+      final newLevel = ExperienceService.levelFromExp(nextTotalExp);
+      final shouldEvolve =
+          _crossedEvolution(_level, newLevel) && !_evolutionPending;
+
+      if (!mounted) return;
+      setState(() {
+        _prevLevel = _level;
+        _level = newLevel;
+        _totalExp = nextTotalExp;
+        _expProgress = ExperienceService.expProgress(nextTotalExp);
+        _currentComment = '데모 경험치가 추가됐어요!';
+        if (shouldEvolve) _evolutionPending = true;
+      });
+
+      if (shouldEvolve) {
+        _xpTimer?.cancel();
+        WidgetsBinding.instance.addPostFrameCallback(
+          (_) => _triggerEvolution(),
+        );
+      } else {
+        _refreshCharacterIfNeeded(newLevel);
+      }
+    } finally {
+      if (mounted) setState(() => _isAddingDemoExp = false);
+    }
+  }
+
+  Future<void> _resetDemoExperience() async {
+    if (_isResettingDemoExp || !_isDemoModeEnabled) return;
+
+    setState(() => _isResettingDemoExp = true);
+    try {
+      if (!_usesBackendPetState) {
+        await ExperienceService.resetExp();
+      }
+
+      if (!mounted) return;
+      setState(() {
+        _prevLevel = _level;
+        _level = 1;
+        _totalExp = 0;
+        _expProgress = 0.0;
+        _evolutionPending = false;
+        _currentComment = '데모 경험치가 초기화됐어요!';
+      });
+      _refreshCharacterIfNeeded(1);
+    } finally {
+      if (mounted) setState(() => _isResettingDemoExp = false);
+    }
   }
 
   void _triggerEvolution() {
@@ -264,12 +386,10 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   String _formatAmount(int amount) {
-    return amount
-        .toString()
-        .replaceAllMapped(
-          RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'),
-          (m) => '${m[1]},',
-        );
+    return amount.toString().replaceAllMapped(
+      RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'),
+      (m) => '${m[1]},',
+    );
   }
 
   /// 일일 예산 초과 그래프 (짧은 바 형태, 상단 카드 내부에 삽입)
@@ -298,25 +418,24 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
             ),
           ),
-          if (isOver) ...
-            [
-              const SizedBox(width: 8),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
-                decoration: BoxDecoration(
-                  color: Colors.red.withOpacity(0.15),
-                  borderRadius: BorderRadius.circular(6),
-                ),
-                child: const Text(
-                  '초과',
-                  style: TextStyle(
-                    color: Colors.red,
-                    fontSize: 11,
-                    fontWeight: FontWeight.bold,
-                  ),
+          if (isOver) ...[
+            const SizedBox(width: 8),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+              decoration: BoxDecoration(
+                color: Colors.red.withValues(alpha: 0.15),
+                borderRadius: BorderRadius.circular(6),
+              ),
+              child: const Text(
+                '초과',
+                style: TextStyle(
+                  color: Colors.red,
+                  fontSize: 11,
+                  fontWeight: FontWeight.bold,
                 ),
               ),
-            ],
+            ),
+          ],
         ],
       ),
     ];
@@ -325,8 +444,18 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   Widget build(BuildContext context) {
     final colors = context.watch<ThemeProvider>().colors;
-    final int? remainingBudget =
-        _monthlyBudget > 0 ? _monthlyBudget - _monthlySpend : null;
+    final int? remainingBudget = _monthlyBudget > 0
+        ? _monthlyBudget - _monthlySpend
+        : null;
+    final petTitle = _petName ?? _characterLabel(_level);
+    final speciesLabel = _petSpecies == null
+        ? null
+        : _petSpeciesLabel(_petSpecies!);
+    final petSubtitle = _petSpecies == null
+        ? _characterLabel(_level)
+        : speciesLabel == null
+        ? null
+        : '${_characterLabel(_level)} · $speciesLabel';
 
     return Scaffold(
       backgroundColor: colors.background,
@@ -368,7 +497,10 @@ class _HomeScreenState extends State<HomeScreen> {
 
               // 레벨 / XP / 지출 카드
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 12,
+                ),
                 decoration: BoxDecoration(
                   color: colors.cardBackground,
                   borderRadius: BorderRadius.circular(20),
@@ -388,15 +520,19 @@ class _HomeScreenState extends State<HomeScreen> {
                         ),
                         const SizedBox(width: 8),
                         Text(
-                          _characterLabel(_level),
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: colors.subText,
-                          ),
+                          petTitle,
+                          style: TextStyle(fontSize: 13, color: colors.subText),
                         ),
                       ],
                     ),
-                    const SizedBox(height: 8),
+                    if (petSubtitle != null) ...[
+                      const SizedBox(height: 4),
+                      Text(
+                        petSubtitle,
+                        style: TextStyle(fontSize: 12, color: colors.subText),
+                      ),
+                    ],
+                    const SizedBox(height: 10),
                     Row(
                       children: [
                         Text(
@@ -423,7 +559,67 @@ class _HomeScreenState extends State<HomeScreen> {
                         ),
                       ],
                     ),
-                    const SizedBox(height: 12),
+                    if (_isDemoModeEnabled) ...[
+                      const SizedBox(height: 12),
+                      Align(
+                        alignment: Alignment.centerRight,
+                        child: Wrap(
+                          alignment: WrapAlignment.end,
+                          spacing: 8,
+                          runSpacing: 8,
+                          children: [
+                            OutlinedButton.icon(
+                              onPressed: _isResettingDemoExp
+                                  ? null
+                                  : _resetDemoExperience,
+                              icon: const Icon(Icons.restart_alt, size: 18),
+                              label: Text(
+                                _isResettingDemoExp ? '초기화 중...' : 'EXP 초기화',
+                              ),
+                              style: OutlinedButton.styleFrom(
+                                foregroundColor: colors.primaryText,
+                                side: BorderSide(color: colors.primaryText),
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 14,
+                                  vertical: 10,
+                                ),
+                              ),
+                            ),
+                            FilledButton.icon(
+                              onPressed: _isAddingDemoExp
+                                  ? null
+                                  : _addDemoExperience,
+                              icon: const Icon(Icons.bolt, size: 18),
+                              label: Text(
+                                _isAddingDemoExp ? '추가 중...' : 'EXP +100',
+                              ),
+                              style: FilledButton.styleFrom(
+                                backgroundColor: colors.primaryText,
+                                foregroundColor: colors.background,
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 14,
+                                  vertical: 10,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                    const SizedBox(height: 20),
+                    if (_usesBackendPetState) ...[
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: [
+                          _buildPetStatusChip('기분', _petMood, colors),
+                          _buildPetStatusChip('건강', _petHealth, colors),
+                          _buildPetStatusChip('청결', _petCleanliness, colors),
+                          _buildPetStatusChip('코인', _petCoins, colors),
+                        ],
+                      ),
+                      const SizedBox(height: 20),
+                    ],
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
@@ -432,7 +628,10 @@ class _HomeScreenState extends State<HomeScreen> {
                           children: [
                             Text(
                               '오늘의 소비',
-                              style: TextStyle(fontSize: 12, color: colors.subText),
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: colors.subText,
+                              ),
                             ),
                             Text(
                               '${_formatAmount(_todaySpend)}원',
@@ -449,7 +648,10 @@ class _HomeScreenState extends State<HomeScreen> {
                           children: [
                             Text(
                               '남은 예산',
-                              style: TextStyle(fontSize: 12, color: colors.subText),
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: colors.subText,
+                              ),
                             ),
                             Text(
                               remainingBudget != null
@@ -458,7 +660,8 @@ class _HomeScreenState extends State<HomeScreen> {
                               style: TextStyle(
                                 fontSize: 16,
                                 fontWeight: FontWeight.bold,
-                                color: remainingBudget != null &&
+                                color:
+                                    remainingBudget != null &&
                                         remainingBudget < 0
                                     ? Colors.red
                                     : colors.primaryText,
@@ -489,8 +692,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       child: Center(
                         child: _videoController.value.isInitialized
                             ? AspectRatio(
-                                aspectRatio:
-                                    _videoController.value.aspectRatio,
+                                aspectRatio: _videoController.value.aspectRatio,
                                 child: VideoPlayer(_videoController),
                               )
                             : CircularProgressIndicator(
@@ -537,5 +739,37 @@ class _HomeScreenState extends State<HomeScreen> {
     if (level >= 10) return '범고래';
     if (level >= 5) return '파란 고래';
     return '돌고래';
+  }
+
+  String? _petSpeciesLabel(String species) {
+    switch (species) {
+      case 'killer_whale':
+      case 'orca':
+        return '범고래';
+      case 'blue_whale':
+        return '파란 고래';
+      case 'dolphin':
+        return '돌고래';
+      default:
+        return null;
+    }
+  }
+
+  Widget _buildPetStatusChip(String label, int? value, ThemeColors colors) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: colors.background,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Text(
+        '$label ${value ?? '-'}',
+        style: TextStyle(
+          color: colors.primaryText,
+          fontSize: 12,
+          fontWeight: FontWeight.w600,
+        ),
+      ),
+    );
   }
 }

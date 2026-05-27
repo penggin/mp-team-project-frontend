@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class ExperienceService {
@@ -11,8 +12,11 @@ class ExperienceService {
   static const String _keyCarryoverAmount = 'budget_carryover_amount';
   static const String _keyTodaySpendDate = 'budget_today_spend_date';
   static const String _keyTodaySpendAmount = 'budget_today_spend_amount';
+  static const String _keyDemoModeEnabled = 'demo_mode_enabled';
 
-  static const int expPerSecond = 7;   // ~58초에 레벨 5 도달 (400 XP)
+  static final ValueNotifier<bool> demoModeEnabled = ValueNotifier(false);
+
+  static const int expPerSecond = 7; // ~58초에 레벨 5 도달 (400 XP)
   static const int xpPerLevel = 100;
   static const int penaltyPer1000Won = 5;
 
@@ -114,6 +118,35 @@ class ExperienceService {
   static String _yesterdayStr() {
     final yesterday = DateTime.now().subtract(const Duration(days: 1));
     return '${yesterday.year}-${yesterday.month.toString().padLeft(2, '0')}-${yesterday.day.toString().padLeft(2, '0')}';
+  }
+
+  static Future<bool> loadDemoMode() async {
+    final prefs = await SharedPreferences.getInstance();
+    final enabled = prefs.getBool(_keyDemoModeEnabled) ?? false;
+    demoModeEnabled.value = enabled;
+    return enabled;
+  }
+
+  static Future<void> setDemoModeEnabled(bool enabled) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_keyDemoModeEnabled, enabled);
+    demoModeEnabled.value = enabled;
+  }
+
+  static Future<int> addDemoExp([int amount = xpPerLevel]) async {
+    final prefs = await SharedPreferences.getInstance();
+    final current = prefs.getInt(_keyTotalExp) ?? 0;
+    final updated = (current + amount).clamp(0, 999999999);
+    await prefs.setInt(_keyTotalExp, updated);
+    await prefs.setInt(_keyLastSaveMs, DateTime.now().millisecondsSinceEpoch);
+    return updated;
+  }
+
+  static Future<int> resetExp() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt(_keyTotalExp, 0);
+    await prefs.setInt(_keyLastSaveMs, DateTime.now().millisecondsSinceEpoch);
+    return 0;
   }
 
   /// 마지막 저장 이후 경과 초만큼 XP 지급. 타이머/재진입 모두 사용.

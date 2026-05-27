@@ -23,8 +23,10 @@ class NotificationProcessing {
     '카드',
   ];
 
+  static final RegExp _amountPattern = RegExp(r'\d[\d,]*\s*원');
+
   static String textFromEvent(ServiceNotificationEvent event) {
-    return _normalizeWhitespace(
+    return normalizeText(
       [
         event.title,
         event.content,
@@ -33,7 +35,26 @@ class NotificationProcessing {
   }
 
   static bool isPaymentText(String text) {
-    return _paymentKeywords.any(text.contains);
+    final normalizedText = normalizeText(text);
+    if (normalizedText.isEmpty) return false;
+
+    final hasKeyword = _paymentKeywords.any(normalizedText.contains);
+    if (!hasKeyword) return false;
+
+    final hasAmount = _amountPattern.hasMatch(normalizedText);
+    final hasTransactionVerb = [
+      '승인',
+      '결제',
+      '출금',
+      '입금',
+      '이체',
+      '취소',
+      '일시불',
+      '할부',
+    ].any(normalizedText.contains);
+
+    if (!hasTransactionVerb) return false;
+    return hasAmount;
   }
 
   static PaymentNotificationCandidate? candidateFromEvent(
@@ -59,7 +80,7 @@ class NotificationProcessing {
     return '$packageName|$notificationId|$text';
   }
 
-  static String _normalizeWhitespace(String text) {
+  static String normalizeText(String text) {
     return text.replaceAll(RegExp(r'\s+'), ' ').trim();
   }
 }

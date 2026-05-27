@@ -34,6 +34,45 @@ void main() {
       expect(candidate.fingerprint, contains('com.card.app'));
     });
 
+    test('accepts backend parser example card messages', () {
+      final event = ServiceNotificationEvent(
+        id: 14,
+        packageName: 'com.sms.app',
+        title: '[KB국민카드]',
+        content: '03/31 12:43 스타벅스 5,600원 일시불',
+        onGoing: false,
+        hasRemoved: false,
+      );
+
+      expect(NotificationProcessing.candidateFromEvent(event), isNotNull);
+    });
+
+    test('ignores keyword-only promotional card notifications', () {
+      final event = ServiceNotificationEvent(
+        id: 12,
+        packageName: 'com.card.app',
+        title: '카드 혜택 안내',
+        content: '이번 주 쇼핑 쿠폰이 도착했어요',
+        onGoing: false,
+        hasRemoved: false,
+      );
+
+      expect(NotificationProcessing.candidateFromEvent(event), isNull);
+    });
+
+    test('ignores promotional card notifications with coupon amounts', () {
+      final event = ServiceNotificationEvent(
+        id: 13,
+        packageName: 'com.card.app',
+        title: '카드 혜택 안내',
+        content: '이번 주 5,000원 쇼핑 쿠폰이 도착했어요',
+        onGoing: false,
+        hasRemoved: false,
+      );
+
+      expect(NotificationProcessing.candidateFromEvent(event), isNull);
+    });
+
     test('ignores the app foreground-service notification', () {
       final event = ServiceNotificationEvent(
         id: 256,

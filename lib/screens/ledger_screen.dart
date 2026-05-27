@@ -3,11 +3,12 @@ import 'package:provider/provider.dart';
 import 'notification_screen.dart';
 import 'package:first/app_colors.dart';
 import 'package:first/services/api_service.dart';
+import 'package:first/services/category_mapper.dart';
 import 'main_screen.dart';
 import 'app_drawer.dart';
 
 class LedgerScreen extends StatefulWidget {
-  const LedgerScreen({Key? key}) : super(key: key);
+  const LedgerScreen({super.key});
 
   @override
   State<LedgerScreen> createState() => _LedgerScreenState();
@@ -49,27 +50,34 @@ class _LedgerScreenState extends State<LedgerScreen> {
       // ✅ API 응답 → 화면용 데이터로 변환
       final converted = entries.map((entry) {
         final DateTime txDate = DateTime.parse(
-          entry['transaction_at'] ?? entry['created_at'] ?? DateTime.now().toIso8601String(),
+          entry['transaction_at'] ??
+              entry['created_at'] ??
+              DateTime.now().toIso8601String(),
         );
         final bool isIncome = entry['type'] == 'income';
         final int amount = (entry['amount'] as num).toInt();
         final String formattedAmount = isIncome
             ? '+${_formatAmount(amount)} 원'
             : '-${_formatAmount(amount)} 원';
+        final String category = CategoryMapper.toDisplay(
+          entry['category']?.toString(),
+        );
 
         return {
-          'date': '${txDate.month}.${txDate.day}',   // ex) '3.31'
-          'fullDate': txDate,                          // 정렬용 DateTime
-          'title': entry['merchant_name'] ?? entry['category'] ?? '내역 없음',
+          'date': '${txDate.month}.${txDate.day}', // ex) '3.31'
+          'fullDate': txDate, // 정렬용 DateTime
+          'title': entry['merchant_name'] ?? category,
           'amount': formattedAmount,
           'isIncome': isIncome,
-          'icon': _iconFromCategory(entry['category']),
+          'icon': _iconFromCategory(category),
         };
       }).toList();
 
       // ✅ 날짜 내림차순 정렬
-      converted.sort((a, b) =>
-          (b['fullDate'] as DateTime).compareTo(a['fullDate'] as DateTime));
+      converted.sort(
+        (a, b) =>
+            (b['fullDate'] as DateTime).compareTo(a['fullDate'] as DateTime),
+      );
 
       // ✅ 현재 월 데이터만 필터링
       final filtered = converted.where((tx) {
@@ -105,32 +113,31 @@ class _LedgerScreenState extends State<LedgerScreen> {
   String _formatAmount(int amount) {
     return amount.toString().replaceAllMapped(
       RegExp(r'(\d)(?=(\d{3})+(?!\d))'),
-          (m) => '${m[1]},',
+      (m) => '${m[1]},',
     );
   }
 
   // ✅ 카테고리 → 아이콘 변환
   IconData _iconFromCategory(String? category) {
-    switch (category) {
+    switch (CategoryMapper.toDisplay(category)) {
       case '카페':
       case '음료':
         return Icons.local_cafe;
       case '식비':
       case '음식':
         return Icons.restaurant;
-      case '편의점':
       case '쇼핑':
-        return Icons.storefront;
+        return Icons.shopping_bag;
+      case '통신':
+        return Icons.phone_android;
       case '급여':
+      case '이자':
+      case '용돈':
       case '수입':
         return Icons.monetization_on;
-      case '문화':
-      case '구독':
-        return Icons.movie;
-      case '의료':
-        return Icons.local_hospital;
       case '교통':
         return Icons.directions_bus;
+      case '기타':
       default:
         return Icons.account_balance_wallet;
     }
@@ -144,8 +151,10 @@ class _LedgerScreenState extends State<LedgerScreen> {
 
     for (var tx in transactions) {
       if (tx['date'] == dateStr) {
-        final amountStr = (tx['amount'] as String)
-            .replaceAll(RegExp(r'[^0-9]'), '');
+        final amountStr = (tx['amount'] as String).replaceAll(
+          RegExp(r'[^0-9]'),
+          '',
+        );
         final amount = int.tryParse(amountStr) ?? 0;
         if (tx['isIncome'] == true) {
           income += amount;
@@ -230,11 +239,17 @@ class _LedgerScreenState extends State<LedgerScreen> {
             onPressed: _fetchLedgerData,
           ),
           IconButton(
-            icon: Icon(Icons.notifications_none, color: colors.primaryText, size: 32),
+            icon: Icon(
+              Icons.notifications_none,
+              color: colors.primaryText,
+              size: 32,
+            ),
             onPressed: () {
               Navigator.push(
                 context,
-                MaterialPageRoute(builder: (context) => const NotificationScreen()),
+                MaterialPageRoute(
+                  builder: (context) => const NotificationScreen(),
+                ),
               );
             },
           ),
@@ -246,7 +261,10 @@ class _LedgerScreenState extends State<LedgerScreen> {
           // 1. 상단 달력 영역
           // ==========================================
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 10.0),
+            padding: const EdgeInsets.symmetric(
+              horizontal: 20.0,
+              vertical: 10.0,
+            ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -255,7 +273,10 @@ class _LedgerScreenState extends State<LedgerScreen> {
                   children: [
                     GestureDetector(
                       onTap: () => _changeMonth(-1),
-                      child: Icon(Icons.chevron_left, color: colors.primaryText),
+                      child: Icon(
+                        Icons.chevron_left,
+                        color: colors.primaryText,
+                      ),
                     ),
                     const SizedBox(width: 10),
                     Text(
@@ -269,7 +290,10 @@ class _LedgerScreenState extends State<LedgerScreen> {
                     const SizedBox(width: 10),
                     GestureDetector(
                       onTap: () => _changeMonth(1),
-                      child: Icon(Icons.chevron_right, color: colors.primaryText),
+                      child: Icon(
+                        Icons.chevron_right,
+                        color: colors.primaryText,
+                      ),
                     ),
                   ],
                 ),
@@ -287,8 +311,9 @@ class _LedgerScreenState extends State<LedgerScreen> {
                   itemBuilder: (context, index) {
                     int day = index + 1;
                     bool isSelected = selectedDay == day;
-                    bool hasTransaction =
-                    _dateKeys.containsKey('$currentMonth.$day');
+                    bool hasTransaction = _dateKeys.containsKey(
+                      '$currentMonth.$day',
+                    );
 
                     // ✅ 실제 수입/지출 금액 표시
                     final summary = _getDaySummary(day);
@@ -305,9 +330,9 @@ class _LedgerScreenState extends State<LedgerScreen> {
                             height: 28,
                             decoration: isSelected
                                 ? BoxDecoration(
-                              color: colors.primaryText,
-                              shape: BoxShape.circle,
-                            )
+                                    color: colors.primaryText,
+                                    shape: BoxShape.circle,
+                                  )
                                 : null,
                             child: Center(
                               child: Text(
@@ -334,7 +359,10 @@ class _LedgerScreenState extends State<LedgerScreen> {
                           if (hasExpense)
                             Text(
                               '-${_formatAmount(summary['expense']!)}',
-                              style: TextStyle(fontSize: 9, color: expenseColor),
+                              style: TextStyle(
+                                fontSize: 9,
+                                color: expenseColor,
+                              ),
                               overflow: TextOverflow.ellipsis,
                             ),
                           if (hasTransaction)
@@ -345,7 +373,7 @@ class _LedgerScreenState extends State<LedgerScreen> {
                               decoration: BoxDecoration(
                                 color: isSelected
                                     ? colors.background
-                                    : colors.primaryText.withOpacity(0.4),
+                                    : colors.primaryText.withValues(alpha: 0.4),
                                 shape: BoxShape.circle,
                               ),
                             ),
@@ -365,131 +393,139 @@ class _LedgerScreenState extends State<LedgerScreen> {
           // ==========================================
           Expanded(
             child: isLoading
-            // ✅ 로딩 상태
+                // ✅ 로딩 상태
                 ? Center(
-              child: CircularProgressIndicator(
-                color: colors.primaryText,
-              ),
-            )
+                    child: CircularProgressIndicator(color: colors.primaryText),
+                  )
                 : errorMessage != null
-            // ✅ 에러 상태
+                // ✅ 에러 상태
                 ? Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(Icons.error_outline,
-                      color: colors.subText, size: 48),
-                  const SizedBox(height: 12),
-                  Text(
-                    errorMessage!,
-                    style: TextStyle(color: colors.subText),
-                    textAlign: TextAlign.center,
-                  ),
-                  const SizedBox(height: 16),
-                  ElevatedButton(
-                    onPressed: _fetchLedgerData,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: colors.cardBackground,
-                      foregroundColor: colors.primaryText,
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(
+                          Icons.error_outline,
+                          color: colors.subText,
+                          size: 48,
+                        ),
+                        const SizedBox(height: 12),
+                        Text(
+                          errorMessage!,
+                          style: TextStyle(color: colors.subText),
+                          textAlign: TextAlign.center,
+                        ),
+                        const SizedBox(height: 16),
+                        ElevatedButton(
+                          onPressed: _fetchLedgerData,
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: colors.cardBackground,
+                            foregroundColor: colors.primaryText,
+                          ),
+                          child: const Text('다시 시도'),
+                        ),
+                      ],
                     ),
-                    child: const Text('다시 시도'),
-                  ),
-                ],
-              ),
-            )
+                  )
                 : transactions.isEmpty
-            // ✅ 내역 없음 상태
+                // ✅ 내역 없음 상태
                 ? Center(
-              child: Text(
-                '이번 달 내역이 없습니다.',
-                style: TextStyle(color: colors.subText),
-              ),
-            )
-            // ✅ 정상 데이터 리스트
+                    child: Text(
+                      '이번 달 내역이 없습니다.',
+                      style: TextStyle(color: colors.subText),
+                    ),
+                  )
+                // ✅ 정상 데이터 리스트
                 : ListView.builder(
-              controller: _scrollController,
-              padding: const EdgeInsets.symmetric(
-                  horizontal: 20.0, vertical: 15.0),
-              physics: const BouncingScrollPhysics(),
-              itemCount: transactions.length,
-              itemBuilder: (context, index) {
-                final tx = transactions[index];
-                final itemKey = _dateKeys[tx['date']];
-                bool isHighlighted = selectedDay != null &&
-                    tx['date'] == '$currentMonth.$selectedDay';
+                    controller: _scrollController,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 20.0,
+                      vertical: 15.0,
+                    ),
+                    physics: const BouncingScrollPhysics(),
+                    itemCount: transactions.length,
+                    itemBuilder: (context, index) {
+                      final tx = transactions[index];
+                      final itemKey = _dateKeys[tx['date']];
+                      bool isHighlighted =
+                          selectedDay != null &&
+                          tx['date'] == '$currentMonth.$selectedDay';
 
-                return Padding(
-                  key: itemKey,
-                  padding: const EdgeInsets.only(bottom: 20.0),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        tx['date'],
-                        style: TextStyle(
-                          fontWeight: FontWeight.bold,
-                          color: colors.primaryText,
-                          fontSize: 14,
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      AnimatedContainer(
-                        duration: const Duration(milliseconds: 300),
-                        padding: const EdgeInsets.all(18),
-                        decoration: BoxDecoration(
-                          color: isHighlighted
-                              ? colors.primaryText.withOpacity(0.12)
-                              : colors.cardBackground,
-                          borderRadius: BorderRadius.circular(15),
-                          border: isHighlighted
-                              ? Border.all(
-                              color: colors.primaryText,
-                              width: 1.5)
-                              : null,
-                        ),
-                        child: Row(
+                      return Padding(
+                        key: itemKey,
+                        padding: const EdgeInsets.only(bottom: 20.0),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            CircleAvatar(
-                              backgroundColor: colors.background,
-                              child: Icon(tx['icon'],
-                                  color: colors.primaryText,
-                                  size: 20),
-                            ),
-                            const SizedBox(width: 15),
-                            Expanded(
-                              child: Text(
-                                tx['title'],
-                                style: TextStyle(
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.bold,
-                                  color: colors.primaryText,
-                                ),
+                            Text(
+                              tx['date'],
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                color: colors.primaryText,
+                                fontSize: 14,
                               ),
                             ),
-                            Text(
-                              tx['amount'],
-                              style: TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.bold,
-                                color: tx['isIncome']
-                                    ? incomeColor
-                                    : expenseColor,
+                            const SizedBox(height: 8),
+                            AnimatedContainer(
+                              duration: const Duration(milliseconds: 300),
+                              padding: const EdgeInsets.all(18),
+                              decoration: BoxDecoration(
+                                color: isHighlighted
+                                    ? colors.primaryText.withValues(alpha: 0.12)
+                                    : colors.cardBackground,
+                                borderRadius: BorderRadius.circular(15),
+                                border: isHighlighted
+                                    ? Border.all(
+                                        color: colors.primaryText,
+                                        width: 1.5,
+                                      )
+                                    : null,
+                              ),
+                              child: Row(
+                                children: [
+                                  CircleAvatar(
+                                    backgroundColor: colors.background,
+                                    child: Icon(
+                                      tx['icon'],
+                                      color: colors.primaryText,
+                                      size: 20,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 15),
+                                  Expanded(
+                                    child: Text(
+                                      tx['title'],
+                                      style: TextStyle(
+                                        fontSize: 16,
+                                        fontWeight: FontWeight.bold,
+                                        color: colors.primaryText,
+                                      ),
+                                    ),
+                                  ),
+                                  Text(
+                                    tx['amount'],
+                                    style: TextStyle(
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.bold,
+                                      color: tx['isIncome']
+                                          ? incomeColor
+                                          : expenseColor,
+                                    ),
+                                  ),
+                                ],
                               ),
                             ),
                           ],
                         ),
-                      ),
-                    ],
+                      );
+                    },
                   ),
-                );
-              },
-            ),
           ),
         ],
       ),
     );
   }
 }
+
 class LedgerScreenWrapper extends StatelessWidget {
   const LedgerScreenWrapper({super.key});
 
@@ -500,9 +536,7 @@ class LedgerScreenWrapper extends StatelessWidget {
     return Scaffold(
       body: const LedgerScreen(),
       bottomNavigationBar: Container(
-        decoration: BoxDecoration(
-          color: colors.cardBackground,
-        ),
+        decoration: BoxDecoration(color: colors.cardBackground),
         child: BottomNavigationBar(
           currentIndex: 1, // 달력 탭 강조
           onTap: (index) {
@@ -517,11 +551,26 @@ class LedgerScreenWrapper extends StatelessWidget {
           showSelectedLabels: false,
           showUnselectedLabels: false,
           items: const [
-            BottomNavigationBarItem(icon: Icon(Icons.settings_outlined, size: 30), label: '설정'),
-            BottomNavigationBarItem(icon: Icon(Icons.list_outlined, size: 30), label: '가계부'),
-            BottomNavigationBarItem(icon: Icon(Icons.home_outlined, size: 30), label: '홈'),
-            BottomNavigationBarItem(icon: Icon(Icons.pie_chart_outline, size: 30), label: '통계'),
-            BottomNavigationBarItem(icon: Icon(Icons.menu_book_outlined, size: 30), label: '마이페이지'),
+            BottomNavigationBarItem(
+              icon: Icon(Icons.settings_outlined, size: 30),
+              label: '설정',
+            ),
+            BottomNavigationBarItem(
+              icon: Icon(Icons.list_outlined, size: 30),
+              label: '가계부',
+            ),
+            BottomNavigationBarItem(
+              icon: Icon(Icons.home_outlined, size: 30),
+              label: '홈',
+            ),
+            BottomNavigationBarItem(
+              icon: Icon(Icons.pie_chart_outline, size: 30),
+              label: '통계',
+            ),
+            BottomNavigationBarItem(
+              icon: Icon(Icons.menu_book_outlined, size: 30),
+              label: '마이페이지',
+            ),
           ],
         ),
       ),

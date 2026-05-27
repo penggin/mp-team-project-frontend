@@ -20,7 +20,11 @@ class GroupPaymentScreen extends StatefulWidget {
   final VoidCallback? onGroupDeleted;
 
   /// 내역 추가/제거 후 메인 상태 갱신 콜백
-  final void Function(List<TransactionItem> updated, Set<int> newGroupedIndexes)? onGroupUpdated;
+  final void Function(
+    List<TransactionItem> updated,
+    Set<int> newGroupedIndexes,
+  )?
+  onGroupUpdated;
 
   const GroupPaymentScreen({
     super.key,
@@ -37,7 +41,6 @@ class GroupPaymentScreen extends StatefulWidget {
 
 class _GroupPaymentScreenState extends State<GroupPaymentScreen>
     with TickerProviderStateMixin {
-
   late String _groupName;
   bool _isEditingName = false;
   final TextEditingController _nameController = TextEditingController();
@@ -84,36 +87,48 @@ class _GroupPaymentScreenState extends State<GroupPaymentScreen>
     );
 
     // 버튼 1: 가장 먼저 (빠르게)
-    _btn1Slide =
-        Tween<Offset>(begin: const Offset(0, 1.5), end: Offset.zero).animate(
-          CurvedAnimation(parent: _menuAnimController,
-              curve: const Interval(0.0, 0.65, curve: Curves.easeOutCubic)),
+    _btn1Slide = Tween<Offset>(begin: const Offset(0, 1.5), end: Offset.zero)
+        .animate(
+          CurvedAnimation(
+            parent: _menuAnimController,
+            curve: const Interval(0.0, 0.65, curve: Curves.easeOutCubic),
+          ),
         );
     _btn1Fade = Tween<double>(begin: 0, end: 1).animate(
-      CurvedAnimation(parent: _menuAnimController,
-          curve: const Interval(0.0, 0.5, curve: Curves.easeOut)),
+      CurvedAnimation(
+        parent: _menuAnimController,
+        curve: const Interval(0.0, 0.5, curve: Curves.easeOut),
+      ),
     );
 
     // 버튼 2: 약간 딜레이
-    _btn2Slide =
-        Tween<Offset>(begin: const Offset(0, 1.5), end: Offset.zero).animate(
-          CurvedAnimation(parent: _menuAnimController,
-              curve: const Interval(0.1, 0.75, curve: Curves.easeOutCubic)),
+    _btn2Slide = Tween<Offset>(begin: const Offset(0, 1.5), end: Offset.zero)
+        .animate(
+          CurvedAnimation(
+            parent: _menuAnimController,
+            curve: const Interval(0.1, 0.75, curve: Curves.easeOutCubic),
+          ),
         );
     _btn2Fade = Tween<double>(begin: 0, end: 1).animate(
-      CurvedAnimation(parent: _menuAnimController,
-          curve: const Interval(0.1, 0.6, curve: Curves.easeOut)),
+      CurvedAnimation(
+        parent: _menuAnimController,
+        curve: const Interval(0.1, 0.6, curve: Curves.easeOut),
+      ),
     );
 
     // 버튼 3: 더 딜레이
-    _btn3Slide =
-        Tween<Offset>(begin: const Offset(0, 1.5), end: Offset.zero).animate(
-          CurvedAnimation(parent: _menuAnimController,
-              curve: const Interval(0.2, 0.85, curve: Curves.easeOutCubic)),
+    _btn3Slide = Tween<Offset>(begin: const Offset(0, 1.5), end: Offset.zero)
+        .animate(
+          CurvedAnimation(
+            parent: _menuAnimController,
+            curve: const Interval(0.2, 0.85, curve: Curves.easeOutCubic),
+          ),
         );
     _btn3Fade = Tween<double>(begin: 0, end: 1).animate(
-      CurvedAnimation(parent: _menuAnimController,
-          curve: const Interval(0.2, 0.7, curve: Curves.easeOut)),
+      CurvedAnimation(
+        parent: _menuAnimController,
+        curve: const Interval(0.2, 0.7, curve: Curves.easeOut),
+      ),
     );
   }
 
@@ -138,11 +153,10 @@ class _GroupPaymentScreenState extends State<GroupPaymentScreen>
 
   int get _myExpense => (_totalExpense * 0.4).toInt();
 
-  String _fmt(int amount) =>
-      amount
-          .toString()
-          .replaceAllMapped(
-          RegExp(r'(\d)(?=(\d{3})+(?!\d))'), (m) => '${m[1]},');
+  String _fmt(int amount) => amount.toString().replaceAllMapped(
+    RegExp(r'(\d)(?=(\d{3})+(?!\d))'),
+    (m) => '${m[1]},',
+  );
 
   // ── 메뉴 토글 ──
   void _toggleMenu() {
@@ -255,18 +269,23 @@ class _GroupPaymentScreenState extends State<GroupPaymentScreen>
     showDialog(
       context: context,
       builder: (_) {
-        final colors = context
-            .read<ThemeProvider>()
-            .colors;
+        final colors = context.read<ThemeProvider>().colors;
         return AlertDialog(
           backgroundColor: colors.cardBackground,
           shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(20)),
-          title: Text('그룹 삭제',
-              style: TextStyle(
-                  color: colors.primaryText, fontWeight: FontWeight.bold)),
-          content: Text('그룹을 삭제하면 내역이 개별 항목으로 돌아갑니다.\n계속하시겠어요?',
-              style: TextStyle(color: colors.subText, fontSize: 14)),
+            borderRadius: BorderRadius.circular(20),
+          ),
+          title: Text(
+            '그룹 삭제',
+            style: TextStyle(
+              color: colors.primaryText,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          content: Text(
+            '그룹을 삭제하면 내역이 개별 항목으로 돌아갑니다.\n계속하시겠어요?',
+            style: TextStyle(color: colors.subText, fontSize: 14),
+          ),
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(context),
@@ -278,8 +297,13 @@ class _GroupPaymentScreenState extends State<GroupPaymentScreen>
                 widget.onGroupDeleted?.call();
                 Navigator.pop(context); // GroupPaymentScreen 닫기
               },
-              child: Text('삭제', style: TextStyle(
-                  color: Colors.red, fontWeight: FontWeight.bold)),
+              child: Text(
+                '삭제',
+                style: TextStyle(
+                  color: Colors.red,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
             ),
           ],
         );
@@ -289,9 +313,7 @@ class _GroupPaymentScreenState extends State<GroupPaymentScreen>
 
   @override
   Widget build(BuildContext context) {
-    final colors = context
-        .watch<ThemeProvider>()
-        .colors;
+    final colors = context.watch<ThemeProvider>().colors;
 
     final expenses = _items.where((tx) => !tx.isIncome).toList();
     final incomes = _items.where((tx) => tx.isIncome).toList();
@@ -305,33 +327,39 @@ class _GroupPaymentScreenState extends State<GroupPaymentScreen>
           elevation: 0,
           leading: _isAddMode || _isRemoveMode
               ? TextButton(
-            onPressed: () {
-              setState(() {
-                if (_isRemoveMode) {
-                  _isRemoveMode = false;
-                  _removeSelected.clear();
-                }
-                if (_isAddMode) {
-                  _isAddMode = false;
-                  _addSelected.clear();
-                  _preCheckedIndexes = {};
-                }
-              });
-            },
-            child: Text('취소',
-                style: TextStyle(color: colors.primaryText, fontSize: 15)),
-          )
+                  onPressed: () {
+                    setState(() {
+                      if (_isRemoveMode) {
+                        _isRemoveMode = false;
+                        _removeSelected.clear();
+                      }
+                      if (_isAddMode) {
+                        _isAddMode = false;
+                        _addSelected.clear();
+                        _preCheckedIndexes = {};
+                      }
+                    });
+                  },
+                  child: Text(
+                    '취소',
+                    style: TextStyle(color: colors.primaryText, fontSize: 15),
+                  ),
+                )
               : IconButton(
-            icon: Icon(Icons.arrow_back, color: colors.primaryText),
-            onPressed: () => Navigator.pop(context),
-          ),
+                  icon: Icon(Icons.arrow_back, color: colors.primaryText),
+                  onPressed: () => Navigator.pop(context),
+                ),
           title: Text(
-            _isAddMode ? '항목 선택'
-                : _isRemoveMode ? '제외할 내역 선택'
+            _isAddMode
+                ? '항목 선택'
+                : _isRemoveMode
+                ? '제외할 내역 선택'
                 : '',
-            style: TextStyle(color: colors.primaryText,
-                fontWeight: FontWeight.bold,
-                fontSize: 16),
+            style: TextStyle(
+              color: colors.primaryText,
+              fontWeight: FontWeight.bold,
+              fontSize: 16,
+            ),
           ),
           actions: [
             if (!_isAddMode && !_isRemoveMode)
@@ -341,11 +369,18 @@ class _GroupPaymentScreenState extends State<GroupPaymentScreen>
                   turns: _isMenuOpen ? 0.5 : 0,
                   duration: const Duration(milliseconds: 250),
                   child: Icon(
-                      Icons.edit_outlined, color: colors.primaryText, size: 18),
+                    Icons.edit_outlined,
+                    color: colors.primaryText,
+                    size: 18,
+                  ),
                 ),
-                label: Text('내역 수정',
-                    style: TextStyle(color: colors.primaryText,
-                        fontWeight: FontWeight.w600)),
+                label: Text(
+                  '내역 수정',
+                  style: TextStyle(
+                    color: colors.primaryText,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
               ),
             if (_isRemoveMode)
               TextButton(
@@ -353,8 +388,9 @@ class _GroupPaymentScreenState extends State<GroupPaymentScreen>
                 child: Text(
                   '제외 (${_removeSelected.length})',
                   style: TextStyle(
-                    color: _removeSelected.isEmpty ? colors.subText : Colors
-                        .red,
+                    color: _removeSelected.isEmpty
+                        ? colors.subText
+                        : Colors.red,
                     fontWeight: FontWeight.bold,
                   ),
                 ),
@@ -370,24 +406,24 @@ class _GroupPaymentScreenState extends State<GroupPaymentScreen>
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-
                   // ── 일반 보기 ──
                   if (!_isAddMode && !_isRemoveMode) ...[
                     GestureDetector(
                       onTap: () {
                         setState(() => _isEditingName = true);
                         Future.delayed(const Duration(milliseconds: 100), () {
-                          _nameController.selection =
-                              TextSelection.fromPosition(
-                                TextPosition(
-                                    offset: _nameController.text.length),
-                              );
+                          _nameController
+                              .selection = TextSelection.fromPosition(
+                            TextPosition(offset: _nameController.text.length),
+                          );
                         });
                       },
                       child: Container(
                         width: double.infinity,
                         padding: const EdgeInsets.symmetric(
-                            horizontal: 18, vertical: 16),
+                          horizontal: 18,
+                          vertical: 16,
+                        ),
                         decoration: BoxDecoration(
                           color: colors.cardBackground,
                           borderRadius: BorderRadius.circular(15),
@@ -397,28 +433,37 @@ class _GroupPaymentScreenState extends State<GroupPaymentScreen>
                             Expanded(
                               child: _isEditingName
                                   ? TextField(
-                                controller: _nameController,
-                                autofocus: true,
-                                style: TextStyle(fontSize: 16,
-                                    fontWeight: FontWeight.bold,
-                                    color: colors.primaryText),
-                                decoration: const InputDecoration(
-                                    border: InputBorder.none,
-                                    isDense: true,
-                                    contentPadding: EdgeInsets.zero),
-                                onSubmitted: (v) =>
-                                    setState(() {
-                                      _groupName = v.isEmpty ? _groupName : v;
-                                      _isEditingName = false;
-                                    }),
-                              )
-                                  : Text(_groupName,
-                                  style: TextStyle(fontSize: 16,
-                                      fontWeight: FontWeight.bold,
-                                      color: colors.primaryText)),
+                                      controller: _nameController,
+                                      autofocus: true,
+                                      style: TextStyle(
+                                        fontSize: 16,
+                                        fontWeight: FontWeight.bold,
+                                        color: colors.primaryText,
+                                      ),
+                                      decoration: const InputDecoration(
+                                        border: InputBorder.none,
+                                        isDense: true,
+                                        contentPadding: EdgeInsets.zero,
+                                      ),
+                                      onSubmitted: (v) => setState(() {
+                                        _groupName = v.isEmpty ? _groupName : v;
+                                        _isEditingName = false;
+                                      }),
+                                    )
+                                  : Text(
+                                      _groupName,
+                                      style: TextStyle(
+                                        fontSize: 16,
+                                        fontWeight: FontWeight.bold,
+                                        color: colors.primaryText,
+                                      ),
+                                    ),
                             ),
-                            Icon(Icons.edit_outlined, color: colors.subText,
-                                size: 18),
+                            Icon(
+                              Icons.edit_outlined,
+                              color: colors.subText,
+                              size: 18,
+                            ),
                           ],
                         ),
                       ),
@@ -431,60 +476,82 @@ class _GroupPaymentScreenState extends State<GroupPaymentScreen>
                           Row(
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
-                              Text('총 지출', style: TextStyle(
-                                  fontSize: 15, color: colors.primaryText)),
-                              Text('${_fmt(_totalExpense)}원',
-                                  style: TextStyle(fontSize: 15,
-                                      fontWeight: FontWeight.bold,
-                                      color: colors.primaryText)),
+                              Text(
+                                '총 지출',
+                                style: TextStyle(
+                                  fontSize: 15,
+                                  color: colors.primaryText,
+                                ),
+                              ),
+                              Text(
+                                '${_fmt(_totalExpense)}원',
+                                style: TextStyle(
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.bold,
+                                  color: colors.primaryText,
+                                ),
+                              ),
                             ],
                           ),
                           const SizedBox(height: 10),
                           Row(
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
-                              Text('내 지출', style: TextStyle(
-                                  fontSize: 15, color: colors.primaryText)),
-                              Text('${_fmt(_myExpense)}원',
-                                  style: TextStyle(fontSize: 15,
-                                      fontWeight: FontWeight.bold,
-                                      color: colors.primaryText)),
+                              Text(
+                                '내 지출',
+                                style: TextStyle(
+                                  fontSize: 15,
+                                  color: colors.primaryText,
+                                ),
+                              ),
+                              Text(
+                                '${_fmt(_myExpense)}원',
+                                style: TextStyle(
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.bold,
+                                  color: colors.primaryText,
+                                ),
+                              ),
                             ],
                           ),
                         ],
                       ),
                     ),
                     const SizedBox(height: 16),
-                    Divider(color: colors.primaryText.withOpacity(0.15),
-                        thickness: 1),
+                    Divider(
+                      color: colors.primaryText.withValues(alpha: 0.15),
+                      thickness: 1,
+                    ),
                     const SizedBox(height: 16),
                     if (expenses.isNotEmpty) ...[
-                      Text('지출', style: TextStyle(fontWeight: FontWeight.bold,
+                      Text(
+                        '지출',
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
                           color: colors.primaryText,
-                          fontSize: 14)),
+                          fontSize: 14,
+                        ),
+                      ),
                       const SizedBox(height: 8),
                       ...expenses.map(
-                            (tx) =>
-                            _buildTxCard(
-                              tx,
-                              colors,
-                              mode: _TxCardMode.normal,
-                            ),
+                        (tx) =>
+                            _buildTxCard(tx, colors, mode: _TxCardMode.normal),
                       ),
                       const SizedBox(height: 16),
                     ],
                     if (incomes.isNotEmpty) ...[
-                      Text('수입', style: TextStyle(fontWeight: FontWeight.bold,
+                      Text(
+                        '수입',
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
                           color: colors.primaryText,
-                          fontSize: 14)),
+                          fontSize: 14,
+                        ),
+                      ),
                       const SizedBox(height: 8),
                       ...incomes.map(
-                            (tx) =>
-                            _buildTxCard(
-                              tx,
-                              colors,
-                              mode: _TxCardMode.normal,
-                            ),
+                        (tx) =>
+                            _buildTxCard(tx, colors, mode: _TxCardMode.normal),
                       ),
                     ],
                   ],
@@ -498,10 +565,7 @@ class _GroupPaymentScreenState extends State<GroupPaymentScreen>
                         style: TextStyle(color: colors.subText, fontSize: 13),
                       ),
                     ),
-                    ..._items
-                        .asMap()
-                        .entries
-                        .map((e) {
+                    ..._items.asMap().entries.map((e) {
                       final idx = e.key;
                       final tx = e.value;
                       final sel = _removeSelected.contains(idx);
@@ -511,20 +575,19 @@ class _GroupPaymentScreenState extends State<GroupPaymentScreen>
                         isDisabled: false,
                         accentColor: Colors.red,
                         colors: colors,
-                        onTap: () =>
-                            setState(() {
-                              if (sel)
-                                _removeSelected.remove(idx);
-                              else
-                                _removeSelected.add(idx);
-                            }),
+                        onTap: () => setState(() {
+                          if (sel) {
+                            _removeSelected.remove(idx);
+                          } else {
+                            _removeSelected.add(idx);
+                          }
+                        }),
                       );
                     }),
                   ],
 
                   // ── 내역 추가 모드: 전체 거래 목록을 날짜 구분선사와 함께 표시 ──
-                  if (_isAddMode)
-                    ..._buildAddModeList(colors),
+                  if (_isAddMode) ..._buildAddModeList(colors),
 
                   const SizedBox(height: 120),
                 ],
@@ -534,20 +597,24 @@ class _GroupPaymentScreenState extends State<GroupPaymentScreen>
             // ── 반투명 오버레이 ──
             AnimatedBuilder(
               animation: _overlayAnim,
-              builder: (_, __) =>
-              _overlayAnim.value > 0
+              builder: (context, child) => _overlayAnim.value > 0
                   ? GestureDetector(
-                onTap: _closeMenu,
-                child: Container(
-                    color: Colors.black.withOpacity(_overlayAnim.value)),
-              )
+                      onTap: _closeMenu,
+                      child: Container(
+                        color: Colors.black.withValues(
+                          alpha: _overlayAnim.value,
+                        ),
+                      ),
+                    )
                   : const SizedBox.shrink(),
             ),
 
             // ── 내역 추가 모드: 하단 확인 버튼 ──
             if (_isAddMode)
               Positioned(
-                bottom: 24, left: 20, right: 20,
+                bottom: 24,
+                left: 20,
+                right: 20,
                 child: AnimatedOpacity(
                   opacity: _addSelected.isNotEmpty ? 1.0 : 0.4,
                   duration: const Duration(milliseconds: 200),
@@ -656,9 +723,11 @@ class _GroupPaymentScreenState extends State<GroupPaymentScreen>
             padding: const EdgeInsets.only(bottom: 8, top: 4),
             child: Text(
               tx.date,
-              style: TextStyle(fontWeight: FontWeight.bold,
-                  color: colors.primaryText,
-                  fontSize: 14),
+              style: TextStyle(
+                fontWeight: FontWeight.bold,
+                color: colors.primaryText,
+                fontSize: 14,
+              ),
             ),
           ),
         );
@@ -670,8 +739,8 @@ class _GroupPaymentScreenState extends State<GroupPaymentScreen>
       // 2) 다른 그룹에 속함 → 회색 + 비활성
       // 3) 선택 가능 → 체크박스 토글
       final isPreChecked = _preCheckedIndexes.contains(i); // 이미 그룹 속한 항목
-      final isOtherGroup = widget.groupedIndexes.contains(i) &&
-          !isPreChecked; // 다른 그룹
+      final isOtherGroup =
+          widget.groupedIndexes.contains(i) && !isPreChecked; // 다른 그룹
       final isNewSelected = _addSelected.contains(i); // 새로 선택 중
 
       // 표시상 선택 상태
@@ -680,7 +749,7 @@ class _GroupPaymentScreenState extends State<GroupPaymentScreen>
 
       // 체크 색상: 이미 그룹 항목은 연한 색, 새 선택은 진한 색
       final Color checkColor = isPreChecked
-          ? colors.primaryText.withOpacity(0.35)
+          ? colors.primaryText.withValues(alpha: 0.35)
           : colors.primaryText;
 
       widgets.add(
@@ -692,13 +761,13 @@ class _GroupPaymentScreenState extends State<GroupPaymentScreen>
           colors: colors,
           onTap: isDisabled
               ? null
-              : () =>
-              setState(() {
-                if (isNewSelected)
-                  _addSelected.remove(i);
-                else
-                  _addSelected.add(i);
-              }),
+              : () => setState(() {
+                  if (isNewSelected) {
+                    _addSelected.remove(i);
+                  } else {
+                    _addSelected.add(i);
+                  }
+                }),
         ),
       );
     }
@@ -706,17 +775,22 @@ class _GroupPaymentScreenState extends State<GroupPaymentScreen>
   }
 
   // ── 일반 카드 ──
-  Widget _buildTxCard(TransactionItem tx, ThemeColors colors,
-      {required _TxCardMode mode}) {
+  Widget _buildTxCard(
+    TransactionItem tx,
+    ThemeColors colors, {
+    required _TxCardMode mode,
+  }) {
     final amountStr = tx.amount.replaceAll(RegExp(r'[^0-9]'), '');
     final amount = int.tryParse(amountStr) ?? 0;
 
     return GestureDetector(
       onTap: mode == _TxCardMode.normal
-          ? () =>
-          Navigator.push(context,
+          ? () => Navigator.push(
+              context,
               MaterialPageRoute(
-                  builder: (_) => IndividualPaymentScreen(transaction: tx)))
+                builder: (_) => IndividualPaymentScreen(transaction: tx),
+              ),
+            )
           : null,
       child: Container(
         margin: const EdgeInsets.only(bottom: 10),
@@ -728,21 +802,33 @@ class _GroupPaymentScreenState extends State<GroupPaymentScreen>
         child: Row(
           children: [
             Container(
-              width: 42, height: 42,
+              width: 42,
+              height: 42,
               decoration: BoxDecoration(
-                  color: colors.background, shape: BoxShape.circle),
+                color: colors.background,
+                shape: BoxShape.circle,
+              ),
               child: Icon(tx.icon, color: colors.primaryText, size: 22),
             ),
             const SizedBox(width: 14),
             Expanded(
-              child: Text(tx.title,
-                  style: TextStyle(fontSize: 15,
-                      fontWeight: FontWeight.bold,
-                      color: colors.primaryText)),
+              child: Text(
+                tx.title,
+                style: TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.bold,
+                  color: colors.primaryText,
+                ),
+              ),
             ),
-            Text('${_fmt(amount)} 원',
-                style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold,
-                    color: tx.isIncome ? Colors.blue : Colors.red)),
+            Text(
+              '${_fmt(amount)} 원',
+              style: TextStyle(
+                fontSize: 15,
+                fontWeight: FontWeight.bold,
+                color: tx.isIncome ? Colors.blue : Colors.red,
+              ),
+            ),
           ],
         ),
       ),
@@ -769,9 +855,9 @@ class _GroupPaymentScreenState extends State<GroupPaymentScreen>
         padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
         decoration: BoxDecoration(
           color: isDisabled
-              ? colors.cardBackground.withOpacity(0.5)
+              ? colors.cardBackground.withValues(alpha: 0.5)
               : isSelected
-              ? accentColor.withOpacity(0.08)
+              ? accentColor.withValues(alpha: 0.08)
               : colors.cardBackground,
           borderRadius: BorderRadius.circular(15),
           border: isSelected
@@ -794,11 +880,7 @@ class _GroupPaymentScreenState extends State<GroupPaymentScreen>
                 ),
               ),
               child: isSelected
-                  ? Icon(
-                Icons.check,
-                size: 14,
-                color: colors.background,
-              )
+                  ? Icon(Icons.check, size: 14, color: colors.background)
                   : null,
             ),
 
@@ -813,9 +895,7 @@ class _GroupPaymentScreenState extends State<GroupPaymentScreen>
               ),
               child: Icon(
                 tx.icon,
-                color: isDisabled
-                    ? colors.subText
-                    : colors.primaryText,
+                color: isDisabled ? colors.subText : colors.primaryText,
                 size: 22,
               ),
             ),
@@ -828,9 +908,7 @@ class _GroupPaymentScreenState extends State<GroupPaymentScreen>
                 style: TextStyle(
                   fontSize: 15,
                   fontWeight: FontWeight.bold,
-                  color: isDisabled
-                      ? colors.subText
-                      : colors.primaryText,
+                  color: isDisabled ? colors.subText : colors.primaryText,
                 ),
               ),
             ),
@@ -849,6 +927,7 @@ class _GroupPaymentScreenState extends State<GroupPaymentScreen>
     );
   }
 }
+
 Widget _menuButton({
   required IconData icon,
   required String label,
@@ -863,7 +942,7 @@ Widget _menuButton({
       borderRadius: BorderRadius.circular(16),
       boxShadow: [
         BoxShadow(
-          color: Colors.black.withOpacity(0.08),
+          color: Colors.black.withValues(alpha: 0.08),
           blurRadius: 12,
           offset: const Offset(0, 4),
         ),
@@ -886,4 +965,5 @@ Widget _menuButton({
     ),
   );
 }
+
 enum _TxCardMode { normal }

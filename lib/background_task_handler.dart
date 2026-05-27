@@ -1,26 +1,55 @@
+import 'dart:ui';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:notification_listener_service/notification_event.dart';
 import 'package:notification_listener_service/notification_listener_service.dart';
 import 'services/api_service.dart';
 import 'services/notification_processing.dart';
+import 'services/payment_ingestion_workflow.dart';
+import 'services/payment_push_notification_service.dart';
 
 @pragma('vm:entry-point')
 void startCallback() {
+  DartPluginRegistrant.ensureInitialized();
   FlutterForegroundTask.setTaskHandler(PaymentTaskHandler());
 }
 
+typedef TokenLifecycleMaintainer = Future<bool> Function();
+typedef PaymentCandidateProcessor =
+    Future<PaymentIngestionResult> Function(PaymentNotificationCandidate);
+typedef TaskDataSender = void Function(Object data);
+
 class PaymentTaskHandler extends TaskHandler {
+  PaymentTaskHandler({
+    TokenLifecycleMaintainer? tokenLifecycleMaintainer,
+    PaymentCandidateProcessor? candidateProcessor,
+    PaymentPushNotificationService? pushNotificationService,
+    TaskDataSender? sendDataToMain,
+  }) : _tokenLifecycleMaintainer = tokenLifecycleMaintainer,
+       _candidateProcessor = candidateProcessor,
+       _pushNotificationService =
+           pushNotificationService ?? PaymentPushNotificationService.instance,
+       _sendDataToMain = sendDataToMain ?? FlutterForegroundTask.sendDataToMain;
+
+  final TokenLifecycleMaintainer? _tokenLifecycleMaintainer;
+  final PaymentCandidateProcessor? _candidateProcessor;
+  final PaymentPushNotificationService _pushNotificationService;
+  final TaskDataSender _sendDataToMain;
+
   bool _listenerStarted = false;
 
   @override
   Future<void> onStart(DateTime timestamp, TaskStarter starter) async {
     debugPrint('백그라운드 서비스 시작');
+    await _maintainTokenLifecycle();
     await _startNotificationListener();
   }
 
   @override
-  Future<void> onRepeatEvent(DateTime timestamp) async {}
+  Future<void> onRepeatEvent(DateTime timestamp) async {
+    await _maintainTokenLifecycle();
+  }
 
   @override
   Future<void> onDestroy(DateTime timestamp) async {
@@ -36,19 +65,47 @@ class PaymentTaskHandler extends TaskHandler {
     );
   }
 
+  Future<bool> _maintainTokenLifecycle() async {
+    final tokenLifecycleMaintainer = _tokenLifecycleMaintainer;
+    if (tokenLifecycleMaintainer != null) {
+      return tokenLifecycleMaintainer();
+    }
+
+    final hasToken = await ApiService.hasValidToken();
+    if (!hasToken) {
+      debugPrint('백그라운드 인증 만료: 다시 로그인이 필요합니다');
+      _sendDataToMain({'action': 'authExpired'});
+    }
+    return hasToken;
+  }
+
+  @visibleForTesting
+  Future<void> processNotificationForTest(ServiceNotificationEvent event) {
+    return _processNotification(event);
+  }
+
   Future<void> _processNotification(ServiceNotificationEvent event) async {
     final candidate = NotificationProcessing.candidateFromEvent(event);
     if (candidate == null) return;
+    if (!await _maintainTokenLifecycle()) return;
 
     debugPrint('백그라운드 알림 감지: ${candidate.rawText}');
 
-    final parsed = await ApiService.parseTransaction(candidate.rawText);
-    if (parsed == null) return;
+    final result =
+        await (_candidateProcessor ??
+            PaymentIngestionWorkflow.processCandidate)(candidate);
+    if (!result.saved) {
+      debugPrint('백그라운드 알림 처리 결과: ${result.status.name}');
+      return;
+    }
 
-    final saved = await ApiService.createLedgerEntry(parsed);
-    if (!saved) return;
+    try {
+      await _pushNotificationService.showSavedPayment(result);
+    } catch (e) {
+      debugPrint('백그라운드 결제 처리 알림 전송 실패: $e');
+    }
 
     // UI 측에 갱신 신호 전송
-    FlutterForegroundTask.sendDataToMain({'action': 'refresh'});
+    _sendDataToMain({'action': 'refresh'});
   }
 }

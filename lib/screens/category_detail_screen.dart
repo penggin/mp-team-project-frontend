@@ -26,11 +26,9 @@ class CategoryDetailScreen extends StatelessWidget {
   }
 
   String get formattedTotal {
-    final formatted = totalAmount
-        .toString()
-        .replaceAllMapped(
+    final formatted = totalAmount.toString().replaceAllMapped(
       RegExp(r'(\d)(?=(\d{3})+(?!\d))'),
-          (m) => '${m[1]},',
+      (m) => '${m[1]},',
     );
 
     return '$formatted 원';
@@ -47,10 +45,7 @@ class CategoryDetailScreen extends StatelessWidget {
         backgroundColor: colors.background,
         elevation: 0,
         leading: IconButton(
-          icon: Icon(
-            Icons.arrow_back_ios_new,
-            color: colors.primaryText,
-          ),
+          icon: Icon(Icons.arrow_back_ios_new, color: colors.primaryText),
           onPressed: () => Navigator.pop(context),
         ),
         title: Text(
@@ -104,10 +99,7 @@ class CategoryDetailScreen extends StatelessWidget {
 
                       Text(
                         '횟수 ${transactions.length}회',
-                        style: TextStyle(
-                          fontSize: 14,
-                          color: colors.subText,
-                        ),
+                        style: TextStyle(fontSize: 14, color: colors.subText),
                       ),
                     ],
                   ),
@@ -115,7 +107,7 @@ class CategoryDetailScreen extends StatelessWidget {
 
                 CircleAvatar(
                   radius: 28,
-                  backgroundColor: colors.accent.withOpacity(0.25),
+                  backgroundColor: colors.accent.withValues(alpha: 0.25),
                 ),
               ],
             ),
@@ -129,10 +121,7 @@ class CategoryDetailScreen extends StatelessWidget {
     );
   }
 
-  List<Widget> _buildTransactionList(
-      BuildContext context,
-      ThemeColors colors,
-      ) {
+  List<Widget> _buildTransactionList(BuildContext context, ThemeColors colors) {
     final widgets = <Widget>[];
 
     String? lastDate;
@@ -141,10 +130,7 @@ class CategoryDetailScreen extends StatelessWidget {
       if (tx.date != lastDate) {
         widgets.add(
           Padding(
-            padding: const EdgeInsets.only(
-              top: 10,
-              bottom: 8,
-            ),
+            padding: const EdgeInsets.only(top: 10, bottom: 8),
             child: Text(
               tx.date,
               style: TextStyle(
@@ -164,17 +150,13 @@ class CategoryDetailScreen extends StatelessWidget {
             Navigator.push(
               context,
               MaterialPageRoute(
-                builder: (_) =>
-                    IndividualPaymentScreen(transaction: tx),
+                builder: (_) => IndividualPaymentScreen(transaction: tx),
               ),
             );
           },
           child: Container(
             margin: const EdgeInsets.only(bottom: 12),
-            padding: const EdgeInsets.symmetric(
-              horizontal: 16,
-              vertical: 14,
-            ),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
             decoration: BoxDecoration(
               color: colors.cardBackground,
               borderRadius: BorderRadius.circular(18),
@@ -188,10 +170,7 @@ class CategoryDetailScreen extends StatelessWidget {
                     shape: BoxShape.circle,
                     color: colors.background,
                   ),
-                  child: Icon(
-                    tx.icon,
-                    color: colors.primaryText,
-                  ),
+                  child: Icon(tx.icon, color: colors.primaryText),
                 ),
 
                 const SizedBox(width: 14),
@@ -212,9 +191,7 @@ class CategoryDetailScreen extends StatelessWidget {
                   style: TextStyle(
                     fontWeight: FontWeight.bold,
                     fontSize: 15,
-                    color: tx.isIncome
-                        ? Colors.blue
-                        : Colors.red,
+                    color: tx.isIncome ? Colors.blue : Colors.red,
                   ),
                 ),
               ],

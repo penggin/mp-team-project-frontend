@@ -11,14 +11,15 @@ import '../app_colors.dart';
 
 // --- 1. 전체 화면을 관리하는 껍데기 (네비게이션 바 전용) ---
 class MainScreen extends StatefulWidget {
-  MainScreen({Key? key}) : super(key: globalKey);// ✅ super.key로 변경
-  static final GlobalKey<_MainScreenState> globalKey = GlobalKey<_MainScreenState>();
+  MainScreen({Key? key}) : super(key: globalKey); // ✅ super.key로 변경
+  static final GlobalKey<MainScreenState> globalKey =
+      GlobalKey<MainScreenState>();
 
   @override
-  State<MainScreen> createState() => _MainScreenState();
+  State<MainScreen> createState() => MainScreenState();
 }
 
-class _MainScreenState extends State<MainScreen> {
+class MainScreenState extends State<MainScreen> {
   // 처음 앱을 켜면 '홈(고래)' 화면(인덱스 2)이 보이도록 설정
   int _selectedIndex = 2;
 
@@ -64,47 +65,63 @@ class _MainScreenState extends State<MainScreen> {
     final colors = context.watch<ThemeProvider>().colors;
     return Scaffold(
       // 💡 IndexedStack: 화면을 이동해도 영상이 꺼지지 않고 백그라운드에서 유지되게 해주는 마법의 위젯!
-      body: Builder(builder: (context) {
-        // ✅ MainPaymentScreen 상태에서 거래 데이터를 가져와 CategoryPaymentScreen에 주입
-        final transactions = MainPaymentScreen.transactionsOf(_paymentKey);
-        final groupedIndexes = MainPaymentScreen.groupedIndexesOf(_paymentKey);
+      body: Builder(
+        builder: (context) {
+          // ✅ MainPaymentScreen 상태에서 거래 데이터를 가져와 CategoryPaymentScreen에 주입
+          final transactions = MainPaymentScreen.transactionsOf(_paymentKey);
+          final groupedIndexes = MainPaymentScreen.groupedIndexesOf(
+            _paymentKey,
+          );
 
-        final screens = [
-          const SettingsScreen(),
-          MainPaymentScreen(key: _paymentKey),
-          const HomeScreen(),
-          const StatisticsScreen(),
-          CategoryPaymentScreen(
-            transactions: transactions,
-            groupedIndexes: groupedIndexes,
-          ),
-        ];
+          final screens = [
+            const SettingsScreen(),
+            MainPaymentScreen(key: _paymentKey),
+            const HomeScreen(),
+            const StatisticsScreen(),
+            CategoryPaymentScreen(
+              transactions: transactions,
+              groupedIndexes: groupedIndexes,
+            ),
+          ];
 
-        return IndexedStack(
-          index: _selectedIndex,
-          children: screens,
-        );
-      }),
+          return IndexedStack(index: _selectedIndex, children: screens);
+        },
+      ),
       bottomNavigationBar: Container(
         decoration: BoxDecoration(
           color: colors.cardBackground, // ✅ 테마 적용 (하늘색 or 핑크)
         ),
         child: BottomNavigationBar(
           currentIndex: _selectedIndex, // 현재 선택된 탭 알려주기
-          onTap: _onItemTapped,         // 탭을 눌렀을 때 화면 바꾸기 함수 실행
+          onTap: _onItemTapped, // 탭을 눌렀을 때 화면 바꾸기 함수 실행
           type: BottomNavigationBarType.fixed,
           backgroundColor: Colors.transparent,
           elevation: 0,
-          selectedItemColor: colors.accent,      // ✅ 테마 적용 (선택된 아이콘)
+          selectedItemColor: colors.accent, // ✅ 테마 적용 (선택된 아이콘)
           unselectedItemColor: colors.primaryText, // ✅ 테마 적용 (미선택 아이콘)
           showSelectedLabels: false,
           showUnselectedLabels: false,
           items: const [
-            BottomNavigationBarItem(icon: Icon(Icons.settings_outlined, size: 30), label: '설정'),
-            BottomNavigationBarItem(icon: Icon(Icons.list_outlined, size: 30), label: '가계부'),
-            BottomNavigationBarItem(icon: Icon(Icons.home_outlined, size: 30), label: '홈'),
-            BottomNavigationBarItem(icon: Icon(Icons.pie_chart_outline, size: 30), label: '통계'),
-            BottomNavigationBarItem(icon: Icon(Icons.menu_book_outlined, size: 30), label: '마이페이지'),
+            BottomNavigationBarItem(
+              icon: Icon(Icons.settings_outlined, size: 30),
+              label: '설정',
+            ),
+            BottomNavigationBarItem(
+              icon: Icon(Icons.list_outlined, size: 30),
+              label: '가계부',
+            ),
+            BottomNavigationBarItem(
+              icon: Icon(Icons.home_outlined, size: 30),
+              label: '홈',
+            ),
+            BottomNavigationBarItem(
+              icon: Icon(Icons.pie_chart_outline, size: 30),
+              label: '통계',
+            ),
+            BottomNavigationBarItem(
+              icon: Icon(Icons.menu_book_outlined, size: 30),
+              label: '마이페이지',
+            ),
           ],
         ),
       ),

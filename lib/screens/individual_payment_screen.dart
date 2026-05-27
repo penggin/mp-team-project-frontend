@@ -28,7 +28,8 @@ class IndividualPaymentScreen extends StatefulWidget {
   const IndividualPaymentScreen({super.key, required this.transaction});
 
   @override
-  State<IndividualPaymentScreen> createState() => _IndividualPaymentScreenState();
+  State<IndividualPaymentScreen> createState() =>
+      _IndividualPaymentScreenState();
 }
 
 class _IndividualPaymentScreenState extends State<IndividualPaymentScreen> {
@@ -41,6 +42,7 @@ class _IndividualPaymentScreenState extends State<IndividualPaymentScreen> {
     super.initState();
     _selectedCategory = widget.transaction.category;
   }
+
   @override
   Widget build(BuildContext context) {
     final colors = context.watch<ThemeProvider>().colors;
@@ -68,7 +70,6 @@ class _IndividualPaymentScreenState extends State<IndividualPaymentScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-
               // ══════════════════════════════
               // 1. 상단 아이콘 + 가게명
               // ══════════════════════════════
@@ -113,7 +114,10 @@ class _IndividualPaymentScreenState extends State<IndividualPaymentScreen> {
                 ),
               ),
               const SizedBox(height: 8),
-              Divider(color: colors.primaryText.withOpacity(0.15), thickness: 1),
+              Divider(
+                color: colors.primaryText.withValues(alpha: 0.15),
+                thickness: 1,
+              ),
               const SizedBox(height: 8),
 
               // ══════════════════════════════
@@ -165,7 +169,10 @@ class _IndividualPaymentScreenState extends State<IndividualPaymentScreen> {
               _buildSwitchRow(colors),
               const SizedBox(height: 24),
 
-              Divider(color: colors.primaryText.withOpacity(0.15), thickness: 1),
+              Divider(
+                color: colors.primaryText.withValues(alpha: 0.15),
+                thickness: 1,
+              ),
               const SizedBox(height: 12),
 
               // ══════════════════════════════
@@ -173,7 +180,11 @@ class _IndividualPaymentScreenState extends State<IndividualPaymentScreen> {
               // ══════════════════════════════
               _buildSimpleRow('결제수단', 'NH 카드', colors),
               _buildDivider(colors),
-              _buildSimpleRow('결제일시', '2026년 ${widget.transaction.date.replaceAll('.', '월 ')}일 08:27', colors),
+              _buildSimpleRow(
+                '결제일시',
+                '2026년 ${widget.transaction.date.replaceAll('.', '월 ')}일 08:27',
+                colors,
+              ),
               _buildDivider(colors),
               _buildSimpleRow('사용처', widget.transaction.title, colors),
 
@@ -198,10 +209,7 @@ class _IndividualPaymentScreenState extends State<IndividualPaymentScreen> {
         children: [
           Text(
             label,
-            style: TextStyle(
-              fontSize: 15,
-              color: colors.primaryText,
-            ),
+            style: TextStyle(fontSize: 15, color: colors.primaryText),
           ),
           Text(
             value,
@@ -216,10 +224,13 @@ class _IndividualPaymentScreenState extends State<IndividualPaymentScreen> {
     );
   }
 
-
   // 화살표(>) 있는 행 (카테고리)
-  Widget _buildArrowRow(String label, String value, ThemeColors colors,
-      {VoidCallback? onTap}) {
+  Widget _buildArrowRow(
+    String label,
+    String value,
+    ThemeColors colors, {
+    VoidCallback? onTap,
+  }) {
     return GestureDetector(
       onTap: onTap,
       child: Padding(
@@ -305,10 +316,11 @@ class _IndividualPaymentScreenState extends State<IndividualPaymentScreen> {
                 _includeInTotal = value;
               });
             },
-            activeColor: Colors.white,
-            activeTrackColor: colors.accent,       // ✅ 켜졌을 때 트랙: accent 색상
+            activeThumbColor: Colors.white,
+            activeTrackColor: colors.accent, // ✅ 켜졌을 때 트랙: accent 색상
             inactiveThumbColor: Colors.white,
-            inactiveTrackColor: colors.cardBackground, // ✅ 꺼졌을 때 트랙: cardBackground
+            inactiveTrackColor:
+                colors.cardBackground, // ✅ 꺼졌을 때 트랙: cardBackground
           ),
         ],
       ),
@@ -318,7 +330,7 @@ class _IndividualPaymentScreenState extends State<IndividualPaymentScreen> {
   // 구분선
   Widget _buildDivider(ThemeColors colors) {
     return Divider(
-      color: colors.primaryText.withOpacity(0.08),
+      color: colors.primaryText.withValues(alpha: 0.08),
       thickness: 1,
       height: 1,
     );

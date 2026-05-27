@@ -98,4 +98,39 @@ void main() {
     ]);
     expect(methodCalls.last.arguments, {'id': 'sms-duplicate'});
   });
+
+  test(
+    'does not acknowledge failed SMS events so they can be retried',
+    () async {
+      final methodCalls = <MethodCall>[];
+
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(channel, (call) async {
+            methodCalls.add(call);
+            if (call.method == 'getPendingSmsEvents') {
+              return [
+                {
+                  'id': 'sms-retry',
+                  'sender': '01012345678',
+                  'body': '신한카드 교보문고 12000원 승인',
+                  'receivedAt': 1779520000000,
+                },
+              ];
+            }
+            if (call.method == 'ackSmsEvent') {
+              fail('Failed SMS events must not be acknowledged');
+            }
+            fail('Unexpected method call: ${call.method}');
+          });
+
+      await expectLater(
+        SmsEventService.startListening((event) async {
+          throw StateError('temporary backend failure');
+        }),
+        throwsA(isA<StateError>()),
+      );
+
+      expect(methodCalls.map((call) => call.method), ['getPendingSmsEvents']);
+    },
+  );
 }

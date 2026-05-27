@@ -11,9 +11,9 @@ class BudgetAlertDialog extends StatefulWidget {
 
   /// showDialog를 통해 간편하게 표시
   static Future<void> show(
-      BuildContext context, {
-        required VoidCallback onGoToHistory,
-      }) {
+    BuildContext context, {
+    required VoidCallback onGoToHistory,
+  }) {
     return showDialog(
       context: context,
       barrierDismissible: false,
@@ -62,7 +62,7 @@ class _BudgetAlertDialogState extends State<BudgetAlertDialog>
               children: [
                 AnimatedBuilder(
                   animation: _bellController,
-                  builder: (_, __) => Transform.rotate(
+                  builder: (context, child) => Transform.rotate(
                     angle: (_bellController.value - 0.5) * 0.4,
                     child: Icon(
                       Icons.notifications_active,
@@ -201,7 +201,9 @@ class _AlertCheckItemState extends State<_AlertCheckItem> {
               height: 22,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                color: _checked ? widget.colors.primaryText : Colors.transparent,
+                color: _checked
+                    ? widget.colors.primaryText
+                    : Colors.transparent,
                 border: Border.all(
                   color: _checked
                       ? widget.colors.primaryText
@@ -216,21 +218,21 @@ class _AlertCheckItemState extends State<_AlertCheckItem> {
             const SizedBox(width: 12),
             widget.isLink
                 ? Text(
-              widget.label,
-              style: TextStyle(
-                fontSize: 14,
-                color: widget.colors.primaryText,
-                decoration: TextDecoration.underline,
-                fontWeight: FontWeight.w600,
-              ),
-            )
+                    widget.label,
+                    style: TextStyle(
+                      fontSize: 14,
+                      color: widget.colors.primaryText,
+                      decoration: TextDecoration.underline,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  )
                 : Text(
-              widget.label,
-              style: TextStyle(
-                fontSize: 14,
-                color: widget.colors.primaryText,
-              ),
-            ),
+                    widget.label,
+                    style: TextStyle(
+                      fontSize: 14,
+                      color: widget.colors.primaryText,
+                    ),
+                  ),
           ],
         ),
       ),

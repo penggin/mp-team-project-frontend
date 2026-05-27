@@ -11,18 +11,17 @@ import 'category_detail_screen.dart';
 class CategoryPaymentScreen extends StatelessWidget {
   /// main_payment_screen 에서 넘갨주는 활성 거래 목록
   final List<TransactionItem> transactions;
+
   /// 그룹화된 인덱스 세트 (=스크린에 노출되지 않는 항목)
   final Set<int> groupedIndexes;
 
   static const Map<String, Color> _categoryColors = {
-    '이체':              Color(0xFF9FA8DA),
-    '카테고리 없음':     Color(0xFFBDBDBD),
-    '식비':              Color(0xFFFDD835),
-    '쇼핑, 여가':        Color(0xFFEF9A9A),
-    '여행, 숙박':        Color(0xFFA5D6A7),
-    '카페':              Color(0xFFBCAAA4),
-    '편의점, 마트, 잡화': Color(0xFF9E9E9E),
-    '교통':              Color(0xFF80CBC4),
+    '카페': Color(0xFFBCAAA4),
+    '식비': Color(0xFFFDD835),
+    '쇼핑': Color(0xFFEF9A9A),
+    '교통': Color(0xFF80CBC4),
+    '통신': Color(0xFF9FA8DA),
+    '기타': Color(0xFFB3FFB3),
   };
 
   const CategoryPaymentScreen({
@@ -44,19 +43,24 @@ class CategoryPaymentScreen extends StatelessWidget {
     }
     final entries = totals.entries.toList()
       ..sort((a, b) => b.value.compareTo(a.value));
-    return entries.map((e) => CategorySummary(
-      title: e.key,
-      amountInt: e.value,
-      color: _categoryColors[e.key] ?? const Color(0xFFBDBDBD),
-    )).toList();
+    return entries
+        .map(
+          (e) => CategorySummary(
+            title: e.key,
+            amountInt: e.value,
+            color: _categoryColors[e.key] ?? const Color(0xFFBDBDBD),
+          ),
+        )
+        .toList();
   }
 
   String _totalAmount(List<CategorySummary> cats) {
     final total = cats.fold(0, (s, c) => s + c.amountInt);
-    final formatted = total
-        .toString()
-        .replaceAllMapped(RegExp(r'(\d)(?=(\d{3})+(?!\d))'), (m) => '${m[1]},');
-    return '${formatted}원';
+    final formatted = total.toString().replaceAllMapped(
+      RegExp(r'(\d)(?=(\d{3})+(?!\d))'),
+      (m) => '${m[1]},',
+    );
+    return '$formatted원';
   }
 
   @override
@@ -79,11 +83,17 @@ class CategoryPaymentScreen extends StatelessWidget {
         ),
         actions: [
           IconButton(
-            icon: Icon(Icons.notifications_none, color: colors.primaryText, size: 32),
+            icon: Icon(
+              Icons.notifications_none,
+              color: colors.primaryText,
+              size: 32,
+            ),
             onPressed: () {
               Navigator.push(
                 context,
-                MaterialPageRoute(builder: (context) => const NotificationScreen()),
+                MaterialPageRoute(
+                  builder: (context) => const NotificationScreen(),
+                ),
               );
             },
           ),
@@ -110,14 +120,28 @@ class CategoryPaymentScreen extends StatelessWidget {
                     children: [
                       Icon(Icons.chevron_left, color: colors.primaryText),
                       const SizedBox(width: 5),
-                      Text('3월', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: colors.primaryText)),
+                      Text(
+                        '3월',
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                          color: colors.primaryText,
+                        ),
+                      ),
                       const SizedBox(width: 5),
                       Icon(Icons.chevron_right, color: colors.primaryText),
                     ],
                   ),
                   const SizedBox(height: 15),
                   // 동적 지출 총액
-                  Text(_totalAmount(cats), style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: colors.primaryText)),
+                  Text(
+                    _totalAmount(cats),
+                    style: TextStyle(
+                      fontSize: 24,
+                      fontWeight: FontWeight.bold,
+                      color: colors.primaryText,
+                    ),
+                  ),
                   const SizedBox(height: 25),
                   // 동적 막대 그래프
                   ClipRRect(
@@ -127,12 +151,14 @@ class CategoryPaymentScreen extends StatelessWidget {
                       child: cats.isEmpty
                           ? Container(color: const Color(0xFFBDBDBD))
                           : Row(
-                              children: cats.map((cat) =>
-                                Expanded(
-                                  flex: cat.flexOf(total),
-                                  child: Container(color: cat.color),
-                                )
-                              ).toList(),
+                              children: cats
+                                  .map(
+                                    (cat) => Expanded(
+                                      flex: cat.flexOf(total),
+                                      child: Container(color: cat.color),
+                                    ),
+                                  )
+                                  .toList(),
                             ),
                     ),
                   ),
@@ -145,11 +171,21 @@ class CategoryPaymentScreen extends StatelessWidget {
             if (cats.isEmpty)
               Padding(
                 padding: const EdgeInsets.only(top: 40),
-                child: Text('지출 내역이 없습니다.',
-                    style: TextStyle(color: colors.subText, fontSize: 15)),
+                child: Text(
+                  '지출 내역이 없습니다.',
+                  style: TextStyle(color: colors.subText, fontSize: 15),
+                ),
               )
             else
-              ...cats.map((cat) => _buildCategoryItem(context,cat.title, cat.amount, cat.color, colors,)),
+              ...cats.map(
+                (cat) => _buildCategoryItem(
+                  context,
+                  cat.title,
+                  cat.amount,
+                  cat.color,
+                  colors,
+                ),
+              ),
 
             const SizedBox(height: 80),
           ],
@@ -157,13 +193,14 @@ class CategoryPaymentScreen extends StatelessWidget {
       ),
     );
   }
+
   Widget _buildCategoryItem(
-      BuildContext context,
-      String title,
-      String amount,
-      Color indicatorColor,
-      ThemeColors colors,
-      ) {
+    BuildContext context,
+    String title,
+    String amount,
+    Color indicatorColor,
+    ThemeColors colors,
+  ) {
     return GestureDetector(
       onTap: () {
         final filtered = transactions.where((tx) {
@@ -175,14 +212,11 @@ class CategoryPaymentScreen extends StatelessWidget {
         Navigator.push(
           context,
           MaterialPageRoute(
-            builder: (_) => CategoryDetailScreen(
-              category: title,
-              transactions: filtered,
-            ),
+            builder: (_) =>
+                CategoryDetailScreen(category: title, transactions: filtered),
           ),
         );
       },
-
       child: Container(
         margin: const EdgeInsets.only(bottom: 12),
         padding: const EdgeInsets.all(20),
@@ -192,10 +226,7 @@ class CategoryPaymentScreen extends StatelessWidget {
         ),
         child: Row(
           children: [
-            CircleAvatar(
-              radius: 12,
-              backgroundColor: indicatorColor,
-            ),
+            CircleAvatar(radius: 12, backgroundColor: indicatorColor),
 
             const SizedBox(width: 15),
 

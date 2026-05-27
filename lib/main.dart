@@ -1,24 +1,22 @@
-import 'dart:async';
-
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'screens/splash_screen.dart'; // ✅ login_screen → splash_screen 으로 변경
 import 'app_colors.dart';
-import 'services/api_service.dart';
-import 'services/notification_processing.dart';
-import 'services/sms_event_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   FlutterForegroundTask.init(
     androidNotificationOptions: AndroidNotificationOptions(
-      channelId: 'payment_tracker',
+      channelId: 'payment_tracker_alerts',
       channelName: '결제 감지 중',
       channelDescription: '결제 내역을 자동으로 기록합니다',
-      onlyAlertOnce: true,
-      playSound: false,
+      channelImportance: NotificationChannelImportance.HIGH,
+      priority: NotificationPriority.HIGH,
+      onlyAlertOnce: false,
+      playSound: true,
+      enableVibration: true,
     ),
     iosNotificationOptions: const IOSNotificationOptions(
       showNotification: false,
@@ -31,8 +29,6 @@ void main() async {
     ),
   );
 
-  unawaited(SmsEventService.startListening(_handleIncomingSms));
-
   runApp(
     ChangeNotifierProvider(
       create: (_) => ThemeProvider(),
@@ -41,20 +37,8 @@ void main() async {
   );
 }
 
-Future<void> _handleIncomingSms(SmsEvent event) async {
-  final text = event.body.trim();
-  if (!NotificationProcessing.isPaymentText(text)) return;
-
-  print('SMS 감지(event): $text');
-
-  final parsed = await ApiService.parseTransaction(text);
-  if (parsed == null) return;
-
-  await ApiService.createLedgerEntry(parsed);
-}
-
 class MoneyTrackerApp extends StatelessWidget {
-  const MoneyTrackerApp({Key? key}) : super(key: key);
+  const MoneyTrackerApp({super.key});
 
   @override
   Widget build(BuildContext context) {

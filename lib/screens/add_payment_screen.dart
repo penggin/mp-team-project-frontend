@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
-import 'category_payment_screen.dart';
 import 'individual_payment_screen.dart';
-import '../app_colors.dart';
 import 'category_select_screen.dart';
+import '../services/api_service.dart';
+import '../services/category_mapper.dart';
 import '../services/experience_service.dart';
 import 'budget_alert_dialog.dart';
 import 'main_screen.dart';
@@ -10,10 +10,7 @@ import 'main_screen.dart';
 class AddPaymentScreen extends StatefulWidget {
   final Function(TransactionItem) onAdd;
 
-  const AddPaymentScreen({
-    super.key,
-    required this.onAdd,
-  });
+  const AddPaymentScreen({super.key, required this.onAdd});
 
   @override
   State<AddPaymentScreen> createState() => _AddPaymentScreenState();
@@ -21,11 +18,72 @@ class AddPaymentScreen extends StatefulWidget {
 
 class _AddPaymentScreenState extends State<AddPaymentScreen> {
   bool isIncome = false;
+  bool _isSaving = false;
 
   final TextEditingController amountController = TextEditingController();
   final TextEditingController titleController = TextEditingController();
 
-  String selectedCategory = '카테고리 없음';
+  String selectedCategory = CategoryMapper.othersDisplay;
+
+  @override
+  void dispose() {
+    amountController.dispose();
+    titleController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _savePayment() async {
+    if (_isSaving) return;
+
+    final rawAmount = amountController.text.replaceAll(RegExp(r'[^0-9]'), '');
+    final amount = int.tryParse(rawAmount);
+    final title = titleController.text.trim();
+
+    if (amount == null || amount <= 0 || title.isEmpty) return;
+
+    setState(() => _isSaving = true);
+    final saved = await ApiService.createManualLedgerEntry(
+      amount: amount,
+      type: isIncome ? 'income' : 'expense',
+      category: selectedCategory,
+      merchantName: title,
+      transactionAt: DateTime.now(),
+    );
+    if (!mounted) return;
+    setState(() => _isSaving = false);
+
+    if (!saved) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('내역 저장에 실패했습니다')));
+      return;
+    }
+
+    final formatted = rawAmount.replaceAllMapped(
+      RegExp(r'(\d)(?=(\d{3})+(?!\d))'),
+      (m) => '${m[1]},',
+    );
+
+    final item = TransactionItem(
+      date: '${DateTime.now().month}.${DateTime.now().day}',
+      title: title,
+      amount: '${isIncome ? '+' : '-'}$formatted 원',
+      isIncome: isIncome,
+      category: selectedCategory,
+      icon: isIncome ? Icons.account_balance_wallet : Icons.shopping_bag,
+    );
+
+    widget.onAdd(item);
+    Navigator.pop(context, true);
+    if (!isIncome) {
+      final rootContext = MainScreen.globalKey.currentContext;
+      if (rootContext != null) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          _checkBudgetAfterAdd(rootContext, amount);
+        });
+      }
+    }
+  }
 
   /// 결제 추가 후 하루 예산 초과 여부를 체크—창이 이미 닫혀서 BuildContext는 원래 화면의 것을 사용
   Future<void> _checkBudgetAfterAdd(BuildContext ctx, int addedAmount) async {
@@ -98,9 +156,7 @@ class _AddPaymentScreenState extends State<AddPaymentScreen> {
                       child: Container(
                         margin: const EdgeInsets.all(4),
                         decoration: BoxDecoration(
-                          color: !isIncome
-                              ? Colors.white
-                              : Colors.transparent,
+                          color: !isIncome ? Colors.white : Colors.transparent,
                           borderRadius: BorderRadius.circular(30),
                         ),
                         child: Center(
@@ -125,9 +181,7 @@ class _AddPaymentScreenState extends State<AddPaymentScreen> {
                       child: Container(
                         margin: const EdgeInsets.all(4),
                         decoration: BoxDecoration(
-                          color: isIncome
-                              ? Colors.white
-                              : Colors.transparent,
+                          color: isIncome ? Colors.white : Colors.transparent,
                           borderRadius: BorderRadius.circular(30),
                         ),
                         child: Center(
@@ -150,33 +204,23 @@ class _AddPaymentScreenState extends State<AddPaymentScreen> {
 
             Text(
               '금액을 입력하세요',
-              style: TextStyle(
-                color: Color(0xFF7A1C1C),
-                fontSize: 16,
-              ),
+              style: TextStyle(color: Color(0xFF7A1C1C), fontSize: 16),
             ),
 
             TextField(
               controller: amountController,
               keyboardType: TextInputType.number,
-              decoration: const InputDecoration(
-                hintText: '0원',
-              ),
+              decoration: const InputDecoration(hintText: '0원'),
             ),
 
             const SizedBox(height: 40),
 
             Text(
               isIncome ? '입금처를 입력하세요' : '지출처를 입력하세요',
-              style: const TextStyle(
-                color: Color(0xFF7A1C1C),
-                fontSize: 16,
-              ),
+              style: const TextStyle(color: Color(0xFF7A1C1C), fontSize: 16),
             ),
 
-            TextField(
-              controller: titleController,
-            ),
+            TextField(controller: titleController),
 
             const SizedBox(height: 40),
 
@@ -220,45 +264,10 @@ class _AddPaymentScreenState extends State<AddPaymentScreen> {
               ],
             ),
 
-
             const Spacer(),
 
             GestureDetector(
-              onTap: () {
-                final amount = amountController.text.trim();
-                final title = titleController.text.trim();
-
-                if (amount.isEmpty || title.isEmpty) return;
-
-                final formatted =
-                amount.replaceAllMapped(
-                  RegExp(r'(\d)(?=(\d{3})+(?!\d))'),
-                      (m) => '${m[1]},',
-                );
-
-                final item = TransactionItem(
-                  date: '${DateTime.now().month}.${DateTime.now().day}',
-                  title: title,
-                  amount:
-                  '${isIncome ? '+' : '-'}$formatted 원',
-                  isIncome: isIncome,
-                  category: selectedCategory,
-                  icon: isIncome
-                      ? Icons.account_balance_wallet
-                      : Icons.shopping_bag,
-                );
-
-                widget.onAdd(item);
-                Navigator.pop(context);
-
-                // 지출일 때만 하루 예산 초과 체크
-                if (!isIncome) {
-                  _checkBudgetAfterAdd(
-                    context,
-                    int.tryParse(amount.replaceAll(',', '')) ?? 0,
-                  );
-                }
-              },
+              onTap: _savePayment,
               child: Container(
                 height: 56,
                 margin: const EdgeInsets.only(bottom: 40),
@@ -266,9 +275,9 @@ class _AddPaymentScreenState extends State<AddPaymentScreen> {
                   color: const Color(0xFFF8DCDC),
                   borderRadius: BorderRadius.circular(16),
                 ),
-                child: const Center(
+                child: Center(
                   child: Text(
-                    '추가하기',
+                    _isSaving ? '저장 중...' : '추가하기',
                     style: TextStyle(
                       color: Color(0xFF7A1C1C),
                       fontWeight: FontWeight.bold,
