@@ -151,13 +151,17 @@ class _HomeScreenState extends State<HomeScreen> {
     final totalExp = await ExperienceService.getTotalExp();
     final monthlyBudget = await ExperienceService.getMonthlyBudget();
     final newLevel = ExperienceService.levelFromExp(totalExp);
+    // 앱 재시작 시 이전 레벨을 저장된 값으로 복원 → 이미 진화한 레벨에서 재진입해도 진화 화면 미표시
+    final persistedLevel = await ExperienceService.getLastLevel();
 
     if (!mounted) return;
 
-    final shouldEvolve = _crossedEvolution(_prevLevel, newLevel) && !_evolutionPending;
+    final shouldEvolve = _crossedEvolution(persistedLevel, newLevel) && !_evolutionPending;
+
+    await ExperienceService.saveLastLevel(newLevel);
 
     setState(() {
-      _prevLevel = _level;
+      _prevLevel = persistedLevel;
       _level = newLevel;
       _expProgress = ExperienceService.expProgress(totalExp);
       _todaySpend = todaySpend;
@@ -216,11 +220,31 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  void _generateRandomComment() {
+  Future<void> _generateRandomComment() async {
     final random = Random();
     setState(() {
       _currentComment = _comments[random.nextInt(_comments.length)];
     });
+
+    // 캐릭터 탭마다 50 XP 지급
+    await ExperienceService.addExp(50);
+    final totalExp = await ExperienceService.getTotalExp();
+    final newLevel = ExperienceService.levelFromExp(totalExp);
+    if (!mounted) return;
+
+    final shouldEvolve = _crossedEvolution(_level, newLevel) && !_evolutionPending;
+    setState(() {
+      _prevLevel = _level;
+      _level = newLevel;
+      _expProgress = ExperienceService.expProgress(totalExp);
+      if (shouldEvolve) _evolutionPending = true;
+    });
+
+    if (shouldEvolve) {
+      await ExperienceService.saveLastLevel(newLevel);
+      _xpTimer?.cancel();
+      WidgetsBinding.instance.addPostFrameCallback((_) => _triggerEvolution());
+    }
   }
 
   String _formatAmount(int amount) {

@@ -70,7 +70,7 @@ class ApiService {
         }),
       );
       print('가계부 저장 응답: ${response.statusCode} ${response.body}');
-      return response.statusCode == 200;
+      return response.statusCode == 200 || response.statusCode == 201;
     } catch (e) {
       print('가계부 저장 에러: $e');
       return false;

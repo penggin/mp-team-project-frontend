@@ -6,8 +6,9 @@ class ExperienceService {
   static const String _keyMonthlyBudget = 'xp_monthly_budget';
   static const String _keyPenaltyDay = 'xp_penalty_day';
   static const String _keyPenalizedAmount = 'xp_penalized_amount';
+  static const String _keyLastLevel = 'xp_last_level';
 
-  static const int expPerSecond = 7;   // ~58초에 레벨 5 도달 (400 XP)
+  static const int expPerMinute = 1;
   static const int xpPerLevel = 100;
   static const int penaltyPer1000Won = 5;
 
@@ -21,6 +22,16 @@ class ExperienceService {
     return prefs.getInt(_keyTotalExp) ?? 0;
   }
 
+  static Future<int> getLastLevel() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getInt(_keyLastLevel) ?? 1;
+  }
+
+  static Future<void> saveLastLevel(int level) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt(_keyLastLevel, level);
+  }
+
   static Future<int> getMonthlyBudget() async {
     final prefs = await SharedPreferences.getInstance();
     return prefs.getInt(_keyMonthlyBudget) ?? 0;
@@ -31,14 +42,21 @@ class ExperienceService {
     await prefs.setInt(_keyMonthlyBudget, amount);
   }
 
-  /// 마지막 저장 이후 경과 초만큼 XP 지급. 타이머/재진입 모두 사용.
+  /// 지정한 XP를 즉시 지급.
+  static Future<void> addExp(int amount) async {
+    final prefs = await SharedPreferences.getInstance();
+    final current = prefs.getInt(_keyTotalExp) ?? 0;
+    await prefs.setInt(_keyTotalExp, current + amount);
+  }
+
+  /// 마지막 저장 이후 경과 분만큼 XP 지급.
   static Future<int> addTimeBasedExp() async {
     final prefs = await SharedPreferences.getInstance();
     final now = DateTime.now().millisecondsSinceEpoch;
     final last = prefs.getInt(_keyLastSaveMs) ?? now;
 
-    final diffSeconds = ((now - last) / 1000).floor();
-    final earned = diffSeconds * expPerSecond;
+    final diffSeconds = ((now - last) / 60000).floor();
+    final earned = diffSeconds * expPerMinute;
 
     if (earned > 0) {
       final current = prefs.getInt(_keyTotalExp) ?? 0;
