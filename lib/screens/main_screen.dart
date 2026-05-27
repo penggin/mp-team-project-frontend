@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart'; // ✅ 추가
+import 'package:provider/provider.dart';
+import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'home_screen.dart';
 import 'statistics_screen.dart';
 import 'settings_screen.dart';
 import 'category_payment_screen.dart';
 import 'main_payment_screen.dart';
 import '../app_colors.dart';
+import '../background_task_handler.dart';
 
 // (나중에 가계부, 마이페이지 만들면 여기 추가)
 
@@ -22,6 +24,22 @@ class MainScreen extends StatefulWidget {
 class MainScreenState extends State<MainScreen> {
   // 처음 앱을 켜면 '홈(고래)' 화면(인덱스 2)이 보이도록 설정
   int _selectedIndex = 2;
+
+  @override
+  void initState() {
+    super.initState();
+    _startForegroundService();
+  }
+
+  Future<void> _startForegroundService() async {
+    if (await FlutterForegroundTask.isRunningService) return;
+    await FlutterForegroundTask.startService(
+      serviceId: 256,
+      notificationTitle: '가계부 키우기',
+      notificationText: '결제 내역을 자동으로 기록 중',
+      callback: startCallback,
+    );
+  }
 
   void changeTab(int index) {
     setState(() {

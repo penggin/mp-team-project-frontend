@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import '../background_task_handler.dart';
@@ -37,7 +39,7 @@ class _NotificationScreenState extends State<NotificationScreen> {
 
   List<AppNotification> _notifications = [];
   bool _isLoading = true;
-
+  Timer? _refreshTimer;
   @override
   void initState() {
     super.initState();
@@ -45,11 +47,15 @@ class _NotificationScreenState extends State<NotificationScreen> {
     if (widget.enableBackgroundProcessing) {
       _startNotificationProcessing();
       FlutterForegroundTask.addTaskDataCallback(_onReceiveTaskData);
+      _refreshTimer = Timer.periodic(const Duration(seconds: 3), (_) {
+        if (mounted) _loadFromBackend();
+      });
     }
   }
 
   @override
   void dispose() {
+    _refreshTimer?.cancel();
     if (widget.enableBackgroundProcessing) {
       FlutterForegroundTask.removeTaskDataCallback(_onReceiveTaskData);
     }
@@ -89,16 +95,24 @@ class _NotificationScreenState extends State<NotificationScreen> {
     );
   }
 
-  // 백엔드에서 가계부 내역 불러오기
+  // 백엔드에서 가계부 내역 불러오기 (최신순)
   Future<void> _loadFromBackend() async {
     final entries = await ApiService.getLedgerEntries();
     final visibleEntries = await NotificationInboxStore.visibleLedgerEntries(
       entries,
     );
 
+    // 최신순 정렬: transaction_at 기준 내림차순
+    final sorted = List<Map<String, dynamic>>.from(visibleEntries);
+    sorted.sort((a, b) {
+      final aStr = (a['transaction_at'] ?? a['created_at'] ?? '') as String;
+      final bStr = (b['transaction_at'] ?? b['created_at'] ?? '') as String;
+      return bStr.compareTo(aStr);
+    });
+
     if (!mounted) return;
     setState(() {
-      _notifications = visibleEntries.map((entry) {
+      _notifications = sorted.map((entry) {
         final merchant = entry['merchant_name'] ?? '알 수 없음';
         final amount = entry['amount'] ?? 0;
         final amountStr = amount.toString().replaceAllMapped(
@@ -157,6 +171,7 @@ class _NotificationScreenState extends State<NotificationScreen> {
       },
     );
   }
+
 
   IconData _getIconForCategory(String category) {
     switch (CategoryMapper.toDisplay(category)) {
