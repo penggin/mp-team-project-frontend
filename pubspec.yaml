@@ -67,7 +67,6 @@ flutter:
     - assets/killerwhale.mp4
     - assets/evo_dolphin.mp4
     - assets/evo_bluewhale.mp4
-    - assets/evolution_effect.mp4
     - assets/icon.png
 
   # The following line ensures that the Material Icons font is
