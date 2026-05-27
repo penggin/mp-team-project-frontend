@@ -120,10 +120,107 @@ void main() {
     expect(find.text('스타벅스에서 5,600원 결제'), findsNothing);
     expect(find.text('교보문고에서 12,000원 결제'), findsNothing);
 
-    await tester.tap(find.byTooltip('새로고침'));
+    await tester.pump(const Duration(seconds: 5));
     await tester.pumpAndSettle();
 
-    expect(find.text('감지된 결제 내역이 없습니다'), findsOneWidget);
+    expect(find.text('스타벅스에서 5,600원 결제'), findsOneWidget);
+    expect(find.text('교보문고에서 12,000원 결제'), findsOneWidget);
     expect(requestMethods, ['GET', 'GET']);
+  });
+
+  testWidgets(
+    'refreshes ledger notifications automatically without a refresh button',
+    (tester) async {
+      SharedPreferences.setMockInitialValues({'access_token': 'access-token'});
+
+      var requestCount = 0;
+      ApiService.setHttpClientForTest(
+        MockClient((request) async {
+          requestCount += 1;
+          expect(request.url.path, '/api/v1/ledger');
+          if (requestCount == 1) {
+            return jsonResponse({
+              'success': true,
+              'data': {'items': []},
+            }, 200);
+          }
+
+          return jsonResponse({
+            'success': true,
+            'data': {
+              'items': [
+                {
+                  'id': 'ledger-1',
+                  'amount': 5600,
+                  'type': 'expense',
+                  'category': 'cafe',
+                  'merchant_name': '스타벅스',
+                },
+              ],
+            },
+          }, 200);
+        }),
+      );
+
+      await tester.pumpWidget(
+        const MaterialApp(
+          home: NotificationScreen(enableBackgroundProcessing: false),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.byTooltip('새로고침'), findsNothing);
+      expect(find.text('감지된 결제 내역이 없습니다'), findsOneWidget);
+
+      await tester.pump(const Duration(seconds: 5));
+      await tester.pumpAndSettle();
+
+      expect(find.text('스타벅스에서 5,600원 결제'), findsOneWidget);
+      expect(requestCount, 2);
+    },
+  );
+
+  testWidgets('shows income ledger entries as income notifications', (
+    tester,
+  ) async {
+    SharedPreferences.setMockInitialValues({'access_token': 'access-token'});
+
+    ApiService.setHttpClientForTest(
+      MockClient((request) async {
+        expect(request.url.path, '/api/v1/ledger');
+        return jsonResponse({
+          'success': true,
+          'data': {
+            'items': [
+              {
+                'id': 'income-1',
+                'amount': 320000,
+                'type': 'income',
+                'category': 'salary',
+                'merchant_name': '알바비',
+              },
+              {
+                'id': 'expense-1',
+                'amount': 5600,
+                'type': 'expense',
+                'category': 'cafe',
+                'merchant_name': '스타벅스',
+              },
+            ],
+          },
+        }, 200);
+      }),
+    );
+
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: NotificationScreen(enableBackgroundProcessing: false),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('알바비 320,000원 입금'), findsOneWidget);
+    expect(find.text('알바비에서 320,000원 결제'), findsNothing);
+    expect(find.text('스타벅스에서 5,600원 결제'), findsOneWidget);
   });
 }

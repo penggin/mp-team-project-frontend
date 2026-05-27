@@ -1,21 +1,36 @@
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 
 import 'payment_ingestion_workflow.dart';
 
 typedef ForegroundNotificationUpdater =
     Future<void> Function({required String title, required String body});
+typedef UserNotificationPresenter =
+    Future<void> Function({required String title, required String body});
 
 class PaymentPushNotificationService {
   PaymentPushNotificationService({
     ForegroundNotificationUpdater? foregroundNotificationUpdater,
+    UserNotificationPresenter? userNotificationPresenter,
   }) : _foregroundNotificationUpdater =
            foregroundNotificationUpdater ??
-           _updateForegroundServiceNotification;
+           _updateForegroundServiceNotification,
+       _userNotificationPresenter =
+           userNotificationPresenter ?? _showUserVisibleNotification;
 
   static final PaymentPushNotificationService instance =
       PaymentPushNotificationService();
 
+  static const String _channelId = 'payment_saved_alerts';
+  static const String _channelName = '결제 처리 알림';
+  static const String _channelDescription = '백그라운드에서 저장된 결제 내역을 알려줍니다';
+  static final FlutterLocalNotificationsPlugin _localNotifications =
+      FlutterLocalNotificationsPlugin();
+  static bool _localNotificationsInitialized = false;
+  static int _nextNotificationId = 3000;
+
   final ForegroundNotificationUpdater _foregroundNotificationUpdater;
+  final UserNotificationPresenter _userNotificationPresenter;
 
   Future<void> requestPermissions() async {
     final permission =
@@ -23,11 +38,22 @@ class PaymentPushNotificationService {
     if (permission != NotificationPermission.granted) {
       await FlutterForegroundTask.requestNotificationPermission();
     }
+
+    await _ensureLocalNotificationsInitialized();
+    await _localNotifications
+        .resolvePlatformSpecificImplementation<
+          AndroidFlutterLocalNotificationsPlugin
+        >()
+        ?.requestNotificationsPermission();
   }
 
   Future<void> showSavedPayment(PaymentIngestionResult result) async {
     final notification = _notificationFor(result);
     await _foregroundNotificationUpdater(
+      title: notification.title,
+      body: notification.body,
+    );
+    await _userNotificationPresenter(
       title: notification.title,
       body: notification.body,
     );
@@ -41,6 +67,42 @@ class PaymentPushNotificationService {
       notificationTitle: title,
       notificationText: body,
     );
+  }
+
+  static Future<void> _showUserVisibleNotification({
+    required String title,
+    required String body,
+  }) async {
+    await _ensureLocalNotificationsInitialized();
+    await _localNotifications.show(
+      id: _nextNotificationId++,
+      title: title,
+      body: body,
+      notificationDetails: NotificationDetails(
+        android: AndroidNotificationDetails(
+          _channelId,
+          _channelName,
+          channelDescription: _channelDescription,
+          importance: Importance.high,
+          priority: Priority.high,
+          playSound: true,
+          enableVibration: true,
+          category: AndroidNotificationCategory.status,
+          styleInformation: BigTextStyleInformation(body),
+        ),
+      ),
+    );
+  }
+
+  static Future<void> _ensureLocalNotificationsInitialized() async {
+    if (_localNotificationsInitialized) return;
+
+    const initializationSettings = InitializationSettings(
+      android: AndroidInitializationSettings('ic_notification'),
+    );
+
+    await _localNotifications.initialize(settings: initializationSettings);
+    _localNotificationsInitialized = true;
   }
 
   _PaymentNotificationContent _notificationFor(PaymentIngestionResult result) {
