@@ -6,60 +6,75 @@ import '../background_task_handler.dart';
 import '../services/api_service.dart';
 import '../services/category_mapper.dart';
 import '../services/experience_service.dart';
-import '../services/notification_inbox_store.dart';
 import '../services/payment_push_notification_service.dart';
 import 'budget_alert_dialog.dart';
 import 'login_screen.dart';
 import 'main_screen.dart';
 
 class AppNotification {
+  final String key;
   final String content;
   final String category;
-  final String? storageKey;
 
   AppNotification({
+    required this.key,
     required this.content,
     required this.category,
-    this.storageKey,
   });
 }
 
 class NotificationScreen extends StatefulWidget {
   final bool enableBackgroundProcessing;
+  final PaymentPushNotificationService? pushNotificationService;
 
-  const NotificationScreen({super.key, this.enableBackgroundProcessing = true});
+  const NotificationScreen({
+    super.key,
+    this.enableBackgroundProcessing = true,
+    this.pushNotificationService,
+  });
 
   @override
   State<NotificationScreen> createState() => _NotificationScreenState();
 }
 
 class _NotificationScreenState extends State<NotificationScreen> {
+  static const Duration _liveRefreshInterval = Duration(seconds: 5);
+
   final Color themeSkyBlue = const Color(0xFFE8F6F8);
   final Color themeDarkBlue = const Color(0xFF1E105C);
 
   List<AppNotification> _notifications = [];
+  final Set<String> _clearedNotificationKeys = {};
   bool _isLoading = true;
-  Timer? _refreshTimer;
+  bool _isRefreshing = false;
+  Timer? _liveRefreshTimer;
+
   @override
   void initState() {
     super.initState();
     _loadFromBackend();
+    _startLiveRefreshTimer();
     if (widget.enableBackgroundProcessing) {
       _startNotificationProcessing();
       FlutterForegroundTask.addTaskDataCallback(_onReceiveTaskData);
-      _refreshTimer = Timer.periodic(const Duration(seconds: 3), (_) {
-        if (mounted) _loadFromBackend();
-      });
     }
   }
 
   @override
   void dispose() {
-    _refreshTimer?.cancel();
+    _liveRefreshTimer?.cancel();
     if (widget.enableBackgroundProcessing) {
       FlutterForegroundTask.removeTaskDataCallback(_onReceiveTaskData);
     }
     super.dispose();
+  }
+
+  void _startLiveRefreshTimer() {
+    _liveRefreshTimer?.cancel();
+    _liveRefreshTimer = Timer.periodic(
+      _liveRefreshInterval,
+      (_) => _loadFromBackend(),
+    );
   }
 
   void _onReceiveTaskData(dynamic data) {
@@ -85,8 +100,19 @@ class _NotificationScreenState extends State<NotificationScreen> {
   }
 
   Future<void> _startForegroundService() async {
-    if (await FlutterForegroundTask.isRunningService) return;
-    await PaymentPushNotificationService.instance.requestPermissions();
+    await (widget.pushNotificationService ??
+            PaymentPushNotificationService.instance)
+        .requestPermissions();
+    if (await FlutterForegroundTask.isRunningService) {
+      await FlutterForegroundTask.updateService(
+        notificationTitle: '가계부 키우기',
+        notificationText: '결제 내역을 자동으로 기록 중',
+        callback: startCallback,
+      );
+      await FlutterForegroundTask.restartService();
+      return;
+    }
+
     await FlutterForegroundTask.startService(
       serviceId: 256,
       notificationTitle: '가계부 키우기',
@@ -97,36 +123,81 @@ class _NotificationScreenState extends State<NotificationScreen> {
 
   // 백엔드에서 가계부 내역 불러오기 (최신순)
   Future<void> _loadFromBackend() async {
-    final entries = await ApiService.getLedgerEntries();
-    final visibleEntries = await NotificationInboxStore.visibleLedgerEntries(
-      entries,
+    if (_isRefreshing) return;
+    _isRefreshing = true;
+
+    try {
+      final entries = await ApiService.getLedgerEntries();
+
+      if (!mounted) return;
+      setState(() {
+        _notifications = entries
+            .map(_notificationFromEntry)
+            .where(
+              (notification) =>
+                  !_clearedNotificationKeys.contains(notification.key),
+            )
+            .toList();
+        _isLoading = false;
+      });
+    } finally {
+      _isRefreshing = false;
+    }
+  }
+
+  AppNotification _notificationFromEntry(Map<String, dynamic> entry) {
+    return AppNotification(
+      key: _notificationKeyForEntry(entry),
+      content: _notificationContentForEntry(entry),
+      category: CategoryMapper.toDisplay(entry['category']?.toString()),
     );
+  }
 
-    // 최신순 정렬: transaction_at 기준 내림차순
-    final sorted = List<Map<String, dynamic>>.from(visibleEntries);
-    sorted.sort((a, b) {
-      final aStr = (a['transaction_at'] ?? a['created_at'] ?? '') as String;
-      final bStr = (b['transaction_at'] ?? b['created_at'] ?? '') as String;
-      return bStr.compareTo(aStr);
-    });
+  String _notificationKeyForEntry(Map<String, dynamic> entry) {
+    final id = _nonEmptyString(entry['id']);
+    if (id != null) return id;
 
-    if (!mounted) return;
-    setState(() {
-      _notifications = sorted.map((entry) {
-        final merchant = entry['merchant_name'] ?? '알 수 없음';
-        final amount = entry['amount'] ?? 0;
-        final amountStr = amount.toString().replaceAllMapped(
-          RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'),
-          (m) => '${m[1]},',
-        );
-        return AppNotification(
-          content: '$merchant에서 $amountStr원 결제',
-          category: CategoryMapper.toDisplay(entry['category']?.toString()),
-          storageKey: NotificationInboxStore.keyForLedgerEntry(entry),
-        );
-      }).toList();
-      _isLoading = false;
-    });
+    return [
+      entry['type'],
+      entry['amount'],
+      entry['category'],
+      entry['merchant_name'],
+      entry['transaction_at'],
+      entry['created_at'],
+      entry['raw_text'],
+    ].map((value) => value?.toString().trim() ?? '').join('|');
+  }
+
+  String _notificationContentForEntry(Map<String, dynamic> entry) {
+    final merchant =
+        _nonEmptyString(entry['merchant_name']) ??
+        CategoryMapper.toDisplay(entry['category']?.toString());
+    final amount = _amountValue(entry['amount']);
+    final amountStr = _formatAmount(amount);
+    final type = entry['type']?.toString();
+
+    if (type == 'income') return '$merchant $amountStr원 입금';
+    if (type == 'transfer') return '$merchant $amountStr원 이체';
+    return '$merchant에서 $amountStr원 결제';
+  }
+
+  String? _nonEmptyString(Object? value) {
+    final text = value?.toString().trim();
+    if (text == null || text.isEmpty) return null;
+    return text;
+  }
+
+  int _amountValue(Object? value) {
+    if (value is int) return value;
+    if (value is num) return value.toInt();
+    return int.tryParse(value?.toString() ?? '') ?? 0;
+  }
+
+  String _formatAmount(int amount) {
+    return amount.toString().replaceAllMapped(
+      RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'),
+      (m) => '${m[1]},',
+    );
   }
 
   /// 결제 감지 후 하루 지출 재계산 후 예산 초과면 알림창
@@ -221,11 +292,10 @@ class _NotificationScreenState extends State<NotificationScreen> {
   }
 
   Future<void> _clearLocalNotifications() async {
-    final keys = _notifications.map((notification) => notification.storageKey);
-    await NotificationInboxStore.hideNotificationKeys(keys);
-    if (!mounted) return;
-
     setState(() {
+      _clearedNotificationKeys.addAll(
+        _notifications.map((notification) => notification.key),
+      );
       _notifications = [];
     });
 
@@ -250,11 +320,6 @@ class _NotificationScreenState extends State<NotificationScreen> {
           style: TextStyle(color: themeDarkBlue, fontWeight: FontWeight.bold),
         ),
         actions: [
-          IconButton(
-            tooltip: '새로고침',
-            icon: Icon(Icons.refresh, color: themeDarkBlue),
-            onPressed: _loadFromBackend,
-          ),
           IconButton(
             tooltip: '알림 비우기',
             icon: Icon(
