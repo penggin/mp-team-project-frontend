@@ -1,5 +1,6 @@
-import 'package:flutter/material.dart';
+import 'dart:async';
 import 'dart:math';
+import 'package:flutter/material.dart';
 import 'package:video_player/video_player.dart';
 import 'package:provider/provider.dart';
 import 'package:notification_listener_service/notification_listener_service.dart';
@@ -38,6 +39,9 @@ class _HomeScreenState extends State<HomeScreen> {
   int _monthlySpend = 0;
   bool _evolutionPending = false;
 
+  Timer? _xpTimer;
+  bool _ticking = false;
+
   final List<String> _comments = [
     "저 너무 배가 불러요!!",
     "이곳저곳 많이 다녔어요!",
@@ -53,15 +57,58 @@ class _HomeScreenState extends State<HomeScreen> {
   void initState() {
     super.initState();
     _requestPermissions();
-    _loadAll();
+    _loadAll().then((_) {
+      if (mounted) _startXpTimer();
+    });
     _initVideoController(_level);
   }
 
   @override
   void dispose() {
+    _xpTimer?.cancel();
     _videoController.dispose();
     super.dispose();
   }
+
+  // ── 실시간 XP 타이머 ──────────────────────────────────────────
+
+  void _startXpTimer() {
+    _xpTimer?.cancel();
+    _xpTimer = Timer.periodic(const Duration(seconds: 1), (_) => _tickXp());
+  }
+
+  Future<void> _tickXp() async {
+    if (_ticking || !mounted) return;
+    _ticking = true;
+    try {
+      await ExperienceService.addTimeBasedExp();
+      await ExperienceService.applyDailyPenalty(_todaySpend);
+      final totalExp = await ExperienceService.getTotalExp();
+      final monthlyBudget = await ExperienceService.getMonthlyBudget();
+      final newLevel = ExperienceService.levelFromExp(totalExp);
+
+      if (!mounted) return;
+
+      final shouldEvolve = _crossedEvolution(_level, newLevel) && !_evolutionPending;
+
+      setState(() {
+        _prevLevel = _level;
+        _level = newLevel;
+        _expProgress = ExperienceService.expProgress(totalExp);
+        _monthlyBudget = monthlyBudget;
+        if (shouldEvolve) _evolutionPending = true;
+      });
+
+      if (shouldEvolve) {
+        _xpTimer?.cancel(); // 진화 중 타이머 일시 정지
+        WidgetsBinding.instance.addPostFrameCallback((_) => _triggerEvolution());
+      }
+    } finally {
+      _ticking = false;
+    }
+  }
+
+  // ─────────────────────────────────────────────────────────────
 
   void _initVideoController(int level) {
     _videoController = VideoPlayerController.asset(characterAsset(level))
@@ -107,9 +154,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
     if (!mounted) return;
 
-    // 진화 임계값 돌파 감지
-    final shouldEvolve = _crossedEvolution(_prevLevel, newLevel) &&
-        !_evolutionPending;
+    final shouldEvolve = _crossedEvolution(_prevLevel, newLevel) && !_evolutionPending;
 
     setState(() {
       _prevLevel = _level;
@@ -122,17 +167,14 @@ class _HomeScreenState extends State<HomeScreen> {
     });
 
     if (shouldEvolve) {
-      // 약간의 딜레이 후 진화 화면 표시 (빌드 완료 후)
       WidgetsBinding.instance.addPostFrameCallback((_) => _triggerEvolution());
     } else {
-      // 레벨에 맞는 캐릭터로 교체 (진화 없이 앱 재시작 시)
       _refreshCharacterIfNeeded(newLevel);
     }
   }
 
   void _refreshCharacterIfNeeded(int newLevel) {
     final needed = characterAsset(newLevel);
-    // 이미 같은 에셋이면 교체 불필요
     if (_videoController.dataSource.contains(needed.split('/').last)) return;
     _videoController.dispose();
     _initVideoController(newLevel);
@@ -156,6 +198,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 setState(() => _evolutionPending = false);
                 _videoController.dispose();
                 _initVideoController(_level);
+                _startXpTimer(); // 진화 완료 후 타이머 재시작
               },
             ),
           );

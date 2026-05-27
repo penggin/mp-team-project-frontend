@@ -187,7 +187,19 @@ class _NotificationScreenState extends State<NotificationScreen> {
         ],
       ),
       body: _isLoading
-          ? Center(child: CircularProgressIndicator(color: themeDarkBlue))
+          ? Center(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  CircularProgressIndicator(color: themeDarkBlue),
+                  const SizedBox(height: 16),
+                  Text(
+                    '알림 읽어오는 중...',
+                    style: TextStyle(color: themeDarkBlue, fontSize: 14),
+                  ),
+                ],
+              ),
+            )
           : _notifications.isEmpty
           ? Center(
         child: Text(
