@@ -14,6 +14,10 @@ class ApiService {
   static const String _refreshTokenExpiresAtKey = 'refresh_token_expires_at';
   static const Duration _refreshTokenRenewalThreshold = Duration(days: 3);
 
+  /// 토큰이 완전히 만료돼 더 이상 갱신할 수 없을 때 호출되는 콜백.
+  /// main.dart에서 로그인 화면으로 이동하도록 등록해두면 됨.
+  static void Function()? onAuthExpired;
+
   static http.Client _httpClient = http.Client();
 
   static Future<SharedPreferences> _freshPreferences() async {
@@ -212,15 +216,27 @@ class ApiService {
     return true;
   }
 
+  static bool _isTransientNetworkError(Object e) {
+    final msg = e.toString().toLowerCase();
+    return msg.contains('connection reset') ||
+        msg.contains('connection refused') ||
+        msg.contains('socketexception') ||
+        msg.contains('clientexception') ||
+        msg.contains('network') ||
+        msg.contains('broken pipe');
+  }
+
   static Future<Map<String, dynamic>?> request(
     String method,
     String endpoint, {
     Map<String, dynamic>? body,
     bool requiresAuth = true,
     bool retryOnUnauthorized = true,
+    bool retryOnNetworkError = true,
   }) async {
     try {
       if (requiresAuth && !await _ensureTokenLifecycle()) {
+        onAuthExpired?.call();
         return null;
       }
 
@@ -233,7 +249,10 @@ class ApiService {
 
       if (response.statusCode == 401 && requiresAuth && retryOnUnauthorized) {
         final refreshed = await refreshAccessToken();
-        if (!refreshed) return null;
+        if (!refreshed) {
+          onAuthExpired?.call();
+          return null;
+        }
 
         return request(
           method,
@@ -247,6 +266,19 @@ class ApiService {
       return _decodeResponse(response);
     } catch (e) {
       print('API 요청 에러: $e');
+      // 일시적 네트워크 오류는 3초 후 1회 재시도
+      if (retryOnNetworkError && _isTransientNetworkError(e)) {
+        print('네트워크 오류 감지 — 3초 후 재시도: $method $endpoint');
+        await Future.delayed(const Duration(seconds: 3));
+        return request(
+          method,
+          endpoint,
+          body: body,
+          requiresAuth: requiresAuth,
+          retryOnUnauthorized: retryOnUnauthorized,
+          retryOnNetworkError: false,
+        );
+      }
       return null;
     }
   }

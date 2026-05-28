@@ -12,6 +12,12 @@ class StatisticsScreen extends StatefulWidget {
 
   @override
   State<StatisticsScreen> createState() => _StatisticsScreenState();
+
+  /// 외부(main_screen 탭 전환 등)에서 통계 새로고침 트리거
+  static void reload(GlobalKey<State<StatisticsScreen>> key) {
+    final s = key.currentState;
+    if (s is _StatisticsScreenState) s._loadStats();
+  }
 }
 
 class _StatisticsScreenState extends State<StatisticsScreen> {
@@ -40,24 +46,112 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
       _selectedMonth.year,
       _selectedMonth.month - 5,
     );
-    final responses = await Future.wait([
-      ApiService.getMonthlyLedgerStats(
-        year: _selectedMonth.year,
-        month: _selectedMonth.month,
-      ),
-      ApiService.getMonthlyCategoryChartStats(
-        startYear: trendStartMonth.year,
-        startMonth: trendStartMonth.month,
-        endYear: _selectedMonth.year,
-        endMonth: _selectedMonth.month,
-      ),
-    ]);
+
+    print('[통계] 🔄 _loadStats — 선택 월: ${_selectedMonth.year}-${_selectedMonth.month}');
+
+    // 전용 stats API는 신뢰 못 함 → 알림창과 동일한 /api/v1/ledger 직접 사용
+    final stats = await _computeStatsFromLedger(
+      _selectedMonth.year,
+      _selectedMonth.month,
+    );
+    final trendStats = await _computeTrendFromLedger(
+      trendStartMonth,
+      _selectedMonth,
+    );
+
+    print('[통계] ✅ stats: total_income=${stats['total_income']} total_expense=${stats['total_expense']} categories=${(stats['category_totals'] as List).length}');
+    print('[통계] ✅ trend months=${(trendStats['months'] as List).length}');
+
     if (!mounted) return;
     setState(() {
-      _stats = responses[0];
-      _trendStats = responses[1];
+      _stats = stats;
+      _trendStats = trendStats;
       _isLoading = false;
     });
+  }
+
+  /// 전용 stats API 실패 시 — `/api/v1/ledger` 응답으로 직접 집계
+  Future<Map<String, dynamic>> _computeStatsFromLedger(
+    int year,
+    int month,
+  ) async {
+    // 1) year/month 필터 시도, 2) 비어있으면 전체 받아서 클라이언트단 필터
+    List<Map<String, dynamic>> entries = await ApiService.getLedgerEntries(
+      year: year,
+      month: month,
+    );
+    if (entries.isEmpty) {
+      final all = await ApiService.getLedgerEntries();
+      entries = all.where((e) {
+        final dt = DateTime.tryParse(
+          (e['transaction_at'] ?? e['created_at'] ?? '') as String,
+        );
+        if (dt == null) return false;
+        final local = dt.toLocal();
+        return local.year == year && local.month == month;
+      }).toList();
+    }
+
+    int totalIncome = 0;
+    int totalExpense = 0;
+    final Map<String, int> categoryTotals = {};
+
+    for (final e in entries) {
+      final type = e['type']?.toString();
+      final amount = (e['amount'] as num?)?.toInt() ?? 0;
+      if (type == 'income') {
+        totalIncome += amount;
+      } else if (type == 'expense') {
+        totalExpense += amount;
+        final cat = e['category']?.toString() ?? 'others';
+        categoryTotals[cat] = (categoryTotals[cat] ?? 0) + amount;
+      }
+    }
+
+    return {
+      'total_income': totalIncome,
+      'total_expense': totalExpense,
+      'category_totals': categoryTotals.entries
+          .map((e) => {'category': e.key, 'amount': e.value})
+          .toList(),
+      'budget_progress': <Map<String, dynamic>>[],
+    };
+  }
+
+  /// 6개월 추이 데이터 직접 집계
+  Future<Map<String, dynamic>> _computeTrendFromLedger(
+    DateTime start,
+    DateTime end,
+  ) async {
+    // 모든 ledger를 한 번에 받아 월별로 집계
+    final all = await ApiService.getLedgerEntries();
+    final Map<String, int> byMonth = {};
+
+    for (final e in all) {
+      if (e['type']?.toString() != 'expense') continue;
+      final dt = DateTime.tryParse(
+        (e['transaction_at'] ?? e['created_at'] ?? '') as String,
+      );
+      if (dt == null) continue;
+      final local = dt.toLocal();
+      final key = '${local.year}-${local.month}';
+      final amount = (e['amount'] as num?)?.toInt() ?? 0;
+      byMonth[key] = (byMonth[key] ?? 0) + amount;
+    }
+
+    final months = <Map<String, dynamic>>[];
+    DateTime cur = DateTime(start.year, start.month);
+    final endMonth = DateTime(end.year, end.month);
+    while (!cur.isAfter(endMonth)) {
+      final key = '${cur.year}-${cur.month}';
+      months.add({
+        'year': cur.year,
+        'month': cur.month,
+        'total_expense': byMonth[key] ?? 0,
+      });
+      cur = DateTime(cur.year, cur.month + 1);
+    }
+    return {'months': months};
   }
 
   void _changeMonth(int delta) {
@@ -229,6 +323,11 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
           ),
         ),
         actions: [
+          IconButton(
+            tooltip: '새로고침',
+            icon: Icon(Icons.refresh, color: themeDarkBlue, size: 28),
+            onPressed: _loadStats,
+          ),
           IconButton(
             icon: Icon(
               Icons.notifications_none,

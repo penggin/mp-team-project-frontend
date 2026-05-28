@@ -67,6 +67,12 @@ class MainPaymentScreen extends StatefulWidget {
     if (s is _MainPaymentScreenState) return s._groupedIndexes;
     return {};
   }
+
+  /// 외부(main_screen 탭 전환 등)에서 거래 내역 새로고침 트리거
+  static void reload(GlobalKey<State<MainPaymentScreen>> key) {
+    final s = key.currentState;
+    if (s is _MainPaymentScreenState) s._loadTransactions();
+  }
 }
 
 class _MainPaymentScreenState extends State<MainPaymentScreen>
@@ -220,10 +226,43 @@ class _MainPaymentScreenState extends State<MainPaymentScreen>
 
   Future<void> _loadTransactions() async {
     setState(() => _isLoadingTransactions = true);
-    final entries = await ApiService.getLedgerEntries(
+
+    // 1) year/month 필터 시도
+    List<Map<String, dynamic>> entries = await ApiService.getLedgerEntries(
       year: currentYear,
       month: currentMonth,
     );
+    print('[결제이력] year=$currentYear month=$currentMonth 필터 결과: ${entries.length}개');
+
+    // 2) 비어있으면 백엔드가 필터를 무시했거나 미지원 — 전체 받아서 클라이언트 필터
+    if (entries.isEmpty) {
+      final all = await ApiService.getLedgerEntries();
+      print('[결제이력] 필터 fallback — 전체: ${all.length}개');
+      entries = all.where((e) {
+        final dt = DateTime.tryParse(
+          (e['transaction_at'] ?? e['created_at'] ?? '') as String,
+        );
+        if (dt == null) return false;
+        final local = dt.toLocal();
+        return local.year == currentYear && local.month == currentMonth;
+      }).toList();
+      print('[결제이력] 클라이언트 필터링 후: ${entries.length}개');
+    }
+
+    // 최신순 정렬 (타임존 포맷 혼재 대응)
+    entries.sort((a, b) {
+      final aDate = DateTime.tryParse(
+        (a['transaction_at'] ?? a['created_at'] ?? '') as String,
+      );
+      final bDate = DateTime.tryParse(
+        (b['transaction_at'] ?? b['created_at'] ?? '') as String,
+      );
+      if (aDate == null && bDate == null) return 0;
+      if (aDate == null) return 1;
+      if (bDate == null) return -1;
+      return bDate.compareTo(aDate);
+    });
+
     if (!mounted) return;
 
     setState(() {
