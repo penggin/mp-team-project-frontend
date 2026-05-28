@@ -438,6 +438,106 @@ class ApiService {
     return [];
   }
 
+  static String _formatYmd(DateTime dt) {
+    final y = dt.year.toString().padLeft(4, '0');
+    final m = dt.month.toString().padLeft(2, '0');
+    final d = dt.day.toString().padLeft(2, '0');
+    return '$y-$m-$d';
+  }
+
+  /// 그룹(bundle) 생성 — 서버가 ID 발급, 응답 data.bundle 반환
+  static Future<Map<String, dynamic>?> createLedgerBundle({
+    required String name,
+    required DateTime bundleDate,
+    List<String>? entryIds,
+  }) async {
+    try {
+      final data = await request(
+        'POST',
+        '/api/v1/ledger/bundles',
+        body: {
+          'name': name,
+          'bundle_date': _formatYmd(bundleDate),
+          if (entryIds != null) 'entry_ids': entryIds,
+        },
+      );
+      print('번들 생성 응답: $data');
+      if (_isSuccessfulResponse(data)) {
+        final detail = data?['data'];
+        if (detail is Map) {
+          final bundle = detail['bundle'];
+          if (bundle is Map<String, dynamic>) return bundle;
+          if (bundle is Map) return Map<String, dynamic>.from(bundle);
+        }
+      }
+    } catch (e) {
+      print('번들 생성 에러: $e');
+    }
+    return null;
+  }
+
+  /// 그룹(bundle) 수정 — name / bundle_date / entry_ids 중 일부만 변경 가능
+  /// entry_ids 를 보내면 해당 번들 멤버를 그 목록으로 전체 교체
+  static Future<bool> updateLedgerBundle({
+    required String bundleId,
+    String? name,
+    DateTime? bundleDate,
+    List<String>? entryIds,
+  }) async {
+    try {
+      final body = <String, dynamic>{
+        if (name != null) 'name': name,
+        if (bundleDate != null) 'bundle_date': _formatYmd(bundleDate),
+        if (entryIds != null) 'entry_ids': entryIds,
+      };
+      final data = await request(
+        'PATCH',
+        '/api/v1/ledger/bundles/$bundleId',
+        body: body,
+      );
+      print('번들 수정($bundleId) 응답: $data');
+      return _isSuccessfulResponse(data);
+    } catch (e) {
+      print('번들 수정 에러: $e');
+      return false;
+    }
+  }
+
+  /// 그룹(bundle) 삭제
+  static Future<bool> deleteLedgerBundle(String bundleId) async {
+    try {
+      final data = await request(
+        'DELETE',
+        '/api/v1/ledger/bundles/$bundleId',
+      );
+      print('번들 삭제($bundleId) 응답: $data');
+      return _isSuccessfulResponse(data);
+    } catch (e) {
+      print('번들 삭제 에러: $e');
+      return false;
+    }
+  }
+
+  /// 내 그룹 목록 조회 — bundle_id → name 매핑 만들 때 사용
+  static Future<List<Map<String, dynamic>>> getLedgerBundles() async {
+    try {
+      final data = await request('GET', '/api/v1/ledger/bundles');
+      print('번들 목록 조회 응답: $data');
+      if (_isSuccessfulResponse(data)) {
+        final items = data?['data']?['items'];
+        if (items is List) {
+          return items
+              .whereType<Map>()
+              .map((b) => Map<String, dynamic>.from(b))
+              .toList();
+        }
+      }
+    } catch (e) {
+      print('번들 목록 조회 에러: $e');
+    }
+    return [];
+  }
+
   static Future<Map<String, dynamic>?> getMonthlyLedgerStats({
     int? year,
     int? month,

@@ -43,8 +43,13 @@ class CategorySummary {
 class TransactionGroup {
   final String name;
   final List<TransactionItem> items;
+  final String? bundleId; // 백엔드 bundle_id (서버 동기화용)
 
-  TransactionGroup({required this.name, required this.items});
+  TransactionGroup({
+    required this.name,
+    required this.items,
+    this.bundleId,
+  });
 }
 
 class MainPaymentScreen extends StatefulWidget {
@@ -265,57 +270,55 @@ class _MainPaymentScreenState extends State<MainPaymentScreen>
 
     if (!mounted) return;
 
-    if (preserveGroups && _groups.isNotEmpty) {
-      // 그룹 유지: 새로운 거래 목록을 불러오되 기존 그룹 정보를 복원
-      final newTransactions = entries.map(_transactionFromLedgerEntry).toList();
+    final newTransactions = entries.map(_transactionFromLedgerEntry).toList();
 
-      // 그룹 아이템의 title+date 기반으로 새 인덱스를 재매핑
-      final newGroupedIndexes = <int>{};
-      final updatedGroups = <TransactionGroup>[];
-
-      for (final group in _groups) {
-        final updatedItems = <TransactionItem>[];
-        for (final oldItem in group.items) {
-          // title과 date가 같은 항목을 새 리스트에서 찾아 매핑
-          final newIdx = newTransactions.indexWhere(
-            (t) => t.title == oldItem.title && t.date == oldItem.date && t.amount == oldItem.amount,
-          );
-          if (newIdx != -1) {
-            newGroupedIndexes.add(newIdx);
-            updatedItems.add(newTransactions[newIdx]);
-          }
-        }
-        if (updatedItems.isNotEmpty) {
-          updatedGroups.add(TransactionGroup(name: group.name, items: updatedItems));
-        }
+    // bundle_id 별로 모은 후, GET /api/v1/ledger/bundles 로 이름 매핑
+    final Map<String, List<int>> byBundle = {};
+    for (int i = 0; i < newTransactions.length; i++) {
+      final bid = newTransactions[i].bundleId;
+      if (bid != null && bid.isNotEmpty) {
+        byBundle.putIfAbsent(bid, () => []).add(i);
       }
-
-      setState(() {
-        _transactions
-          ..clear()
-          ..addAll(newTransactions);
-        _groups
-          ..clear()
-          ..addAll(updatedGroups);
-        _groupedIndexes
-          ..clear()
-          ..addAll(newGroupedIndexes);
-        _selectedIndexes.clear();
-        _isGroupSelectMode = false;
-        _isLoadingTransactions = false;
-      });
-    } else {
-      setState(() {
-        _transactions
-          ..clear()
-          ..addAll(entries.map(_transactionFromLedgerEntry));
-        _groups.clear();
-        _groupedIndexes.clear();
-        _selectedIndexes.clear();
-        _isGroupSelectMode = false;
-        _isLoadingTransactions = false;
-      });
     }
+
+    final Map<String, String> bundleNames = {};
+    if (byBundle.isNotEmpty) {
+      final bundles = await ApiService.getLedgerBundles();
+      for (final b in bundles) {
+        final id = b['id']?.toString();
+        final name = b['name']?.toString();
+        if (id != null && name != null) bundleNames[id] = name;
+      }
+    }
+
+    final newGroups = <TransactionGroup>[];
+    final newGroupedIndexes = <int>{};
+    int autoCounter = 1;
+    for (final entry in byBundle.entries) {
+      final bundleId = entry.key;
+      final indexes = entry.value;
+      final items = indexes.map((i) => newTransactions[i]).toList();
+      final name = bundleNames[bundleId] ?? '그룹${autoCounter++}';
+      newGroups.add(
+        TransactionGroup(name: name, items: items, bundleId: bundleId),
+      );
+      newGroupedIndexes.addAll(indexes);
+    }
+
+    setState(() {
+      _transactions
+        ..clear()
+        ..addAll(newTransactions);
+      _groups
+        ..clear()
+        ..addAll(newGroups);
+      _groupedIndexes
+        ..clear()
+        ..addAll(newGroupedIndexes);
+      _selectedIndexes.clear();
+      _isGroupSelectMode = false;
+      _isLoadingTransactions = false;
+    });
   }
 
   Future<void> _refreshTransactions() async {
@@ -332,6 +335,11 @@ class _MainPaymentScreenState extends State<MainPaymentScreen>
     final transactionAt = DateTime.tryParse(
       entry['transaction_at']?.toString() ?? '',
     )?.toLocal();
+    final id = entry['id']?.toString();
+    final bundleIdRaw = entry['bundle_id']?.toString();
+    final bundleId = (bundleIdRaw == null || bundleIdRaw.isEmpty)
+        ? null
+        : bundleIdRaw;
 
     return TransactionItem(
       date: transactionAt == null
@@ -343,6 +351,8 @@ class _MainPaymentScreenState extends State<MainPaymentScreen>
       category: category,
       icon: _iconForCategory(category, isIncome: isIncome),
       createdAt: transactionAt,
+      id: id,
+      bundleId: bundleId,
     );
   }
 
@@ -393,45 +403,85 @@ class _MainPaymentScreenState extends State<MainPaymentScreen>
     });
   }
 
-  // ✅ 확인 버튼 → GroupPaymentScreen으로 이동
-  void _confirmGroupSelection(ThemeColors colors) {
+  // ✅ 확인 버튼 → 백엔드에 그룹 생성 후 GroupPaymentScreen으로 이동
+  Future<void> _confirmGroupSelection(ThemeColors colors) async {
     if (_selectedIndexes.isEmpty) return;
 
-    final selectedItems = _selectedIndexes
-        .map((i) => _transactions[i])
+    final selectedIdx = _selectedIndexes.toList();
+    final selectedItems = selectedIdx.map((i) => _transactions[i]).toList();
+    final entryIds = selectedItems
+        .where((it) => it.id != null && it.id!.isNotEmpty)
+        .map((it) => it.id!)
         .toList();
-    final groupName = '그룹${_groups.length + 1}';
-    final newGroup = TransactionGroup(name: groupName, items: selectedItems);
 
+    if (entryIds.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('선택한 항목에 백엔드 ID가 없어 그룹화할 수 없습니다'),
+        ),
+      );
+      return;
+    }
+
+    // bundle_date: 선택한 항목의 가장 빠른 거래일을 그룹 대표 날짜로 사용
+    final dates = selectedItems
+        .map((it) => it.createdAt)
+        .whereType<DateTime>()
+        .toList();
+    final bundleDate = dates.isEmpty
+        ? DateTime.now()
+        : dates.reduce((a, b) => a.isBefore(b) ? a : b);
+
+    final groupName = '그룹${_groups.length + 1}';
+
+    final bundle = await ApiService.createLedgerBundle(
+      name: groupName,
+      bundleDate: bundleDate,
+      entryIds: entryIds,
+    );
+
+    if (!mounted) return;
+    if (bundle == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('그룹 생성 실패 — 서버 응답 오류')),
+      );
+      return;
+    }
+
+    final bundleId = bundle['id']?.toString();
+
+    // 그룹 선택 모드 해제
     setState(() {
-      _groups.add(newGroup);
-      _groupedIndexes.addAll(_selectedIndexes);
       _isGroupSelectMode = false;
       _selectedIndexes.clear();
     });
+
+    // 최신 상태 다시 로드 → 그룹 자동 재구성
+    await _loadTransactions();
+    if (!mounted) return;
+
+    // 방금 만든 그룹 찾아 화면 이동
+    final justCreated = bundleId == null
+        ? null
+        : _groups
+              .where((g) => g.bundleId == bundleId)
+              .cast<TransactionGroup?>()
+              .firstWhere((g) => true, orElse: () => null);
+
+    if (justCreated == null) return;
 
     Navigator.push(
       context,
       MaterialPageRoute(
         builder: (_) => GroupPaymentScreen(
-          group: newGroup,
+          group: justCreated,
           allTransactions: _transactions,
           groupedIndexes: Set.from(_groupedIndexes),
-          onGroupDeleted: () {
-            setState(() {
-              _groups.remove(newGroup);
-              for (final item in newGroup.items) {
-                final idx = _transactions.indexOf(item);
-                if (idx != -1) _groupedIndexes.remove(idx);
-              }
-            });
+          onGroupDeleted: () async {
+            await _loadTransactions();
           },
-          onGroupUpdated: (updatedItems, newGroupedIndexes) {
-            setState(() {
-              _groupedIndexes
-                ..clear()
-                ..addAll(newGroupedIndexes);
-            });
+          onGroupUpdated: (updatedItems, newGroupedIndexes) async {
+            await _loadTransactions();
           },
         ),
       ),
@@ -1025,21 +1075,11 @@ class _MainPaymentScreenState extends State<MainPaymentScreen>
               group: group,
               allTransactions: _transactions,
               groupedIndexes: Set.from(_groupedIndexes),
-              onGroupDeleted: () {
-                setState(() {
-                  _groups.remove(group);
-                  for (final item in group.items) {
-                    final idx = _transactions.indexOf(item);
-                    if (idx != -1) _groupedIndexes.remove(idx);
-                  }
-                });
+              onGroupDeleted: () async {
+                await _loadTransactions();
               },
-              onGroupUpdated: (updatedItems, newGroupedIndexes) {
-                setState(() {
-                  _groupedIndexes
-                    ..clear()
-                    ..addAll(newGroupedIndexes);
-                });
+              onGroupUpdated: (updatedItems, newGroupedIndexes) async {
+                await _loadTransactions();
               },
             ),
           ),

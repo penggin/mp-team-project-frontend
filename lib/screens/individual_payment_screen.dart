@@ -12,6 +12,8 @@ class TransactionItem {
   final String category;
   final IconData icon;
   final DateTime? createdAt; // 날짜 정렬용
+  final String? id; // 백엔드 ledger ID (그룹화 PATCH 용)
+  final String? bundleId; // 백엔드 bundle_id (그룹 소속 표시)
 
   const TransactionItem({
     required this.date,
@@ -21,7 +23,23 @@ class TransactionItem {
     required this.category,
     required this.icon,
     this.createdAt,
+    this.id,
+    this.bundleId,
   });
+
+  TransactionItem copyWith({String? bundleId, bool clearBundle = false}) {
+    return TransactionItem(
+      date: date,
+      title: title,
+      amount: amount,
+      isIncome: isIncome,
+      category: category,
+      icon: icon,
+      createdAt: createdAt,
+      id: id,
+      bundleId: clearBundle ? null : (bundleId ?? this.bundleId),
+    );
+  }
 }
 
 class IndividualPaymentScreen extends StatefulWidget {

@@ -324,11 +324,6 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
         ),
         actions: [
           IconButton(
-            tooltip: '새로고침',
-            icon: Icon(Icons.refresh, color: themeDarkBlue, size: 28),
-            onPressed: _loadStats,
-          ),
-          IconButton(
             icon: Icon(
               Icons.notifications_none,
               color: themeDarkBlue,

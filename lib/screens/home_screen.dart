@@ -502,16 +502,6 @@ class _HomeScreenState extends State<HomeScreen> {
         actions: [
           IconButton(
             icon: Icon(
-              Icons.refresh,
-              color: colors.primaryText,
-              size: 28,
-            ),
-            onPressed: () async {
-              await _loadAll();
-            },
-          ),
-          IconButton(
-            icon: Icon(
               Icons.notifications_none,
               color: colors.primaryText,
               size: 32,

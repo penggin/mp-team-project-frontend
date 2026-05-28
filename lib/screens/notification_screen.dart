@@ -13,11 +13,13 @@ class AppNotification {
   final String key;
   final String content;
   final String category;
+  final bool isIncome;
 
   AppNotification({
     required this.key,
     required this.content,
     required this.category,
+    required this.isIncome,
   });
 }
 
@@ -121,6 +123,7 @@ class _NotificationScreenState extends State<NotificationScreen> {
       key: _notificationKeyForEntry(entry),
       content: _notificationContentForEntry(entry),
       category: CategoryMapper.toDisplay(entry['category']?.toString()),
+      isIncome: entry['type']?.toString() == 'income',
     );
   }
 
@@ -284,14 +287,6 @@ class _NotificationScreenState extends State<NotificationScreen> {
         ),
         actions: [
           IconButton(
-            tooltip: '새로고침',
-            icon: Icon(Icons.refresh, color: themeDarkBlue),
-            onPressed: () {
-              print('[알림창] 🔄 수동 새로고침 버튼 클릭');
-              _loadFromBackend();
-            },
-          ),
-          IconButton(
             tooltip: '알림 비우기',
             icon: Icon(
               Icons.delete_sweep_outlined,
@@ -331,31 +326,44 @@ class _NotificationScreenState extends State<NotificationScreen> {
               itemCount: _notifications.length,
               itemBuilder: (context, index) {
                 final item = _notifications[index];
+                // 입금이면 파란색 계열, 결제/지출이면 기본 색상
+                final borderColor = item.isIncome
+                    ? Colors.blue.shade100
+                    : themeSkyBlue;
+                final avatarBg = item.isIncome
+                    ? Colors.blue.shade50
+                    : themeSkyBlue;
+                final iconColor = item.isIncome
+                    ? Colors.blue.shade700
+                    : themeDarkBlue;
+                final textColor = item.isIncome
+                    ? Colors.blue.shade700
+                    : Colors.black87;
                 return Container(
                   margin: const EdgeInsets.only(bottom: 12),
                   padding: const EdgeInsets.all(15),
                   decoration: BoxDecoration(
                     color: Colors.white,
-                    border: Border.all(color: themeSkyBlue, width: 2),
+                    border: Border.all(color: borderColor, width: 2),
                     borderRadius: BorderRadius.circular(15),
                   ),
                   child: Row(
                     children: [
                       CircleAvatar(
-                        backgroundColor: themeSkyBlue,
+                        backgroundColor: avatarBg,
                         child: Icon(
                           _getIconForCategory(item.category),
-                          color: themeDarkBlue,
+                          color: iconColor,
                         ),
                       ),
                       const SizedBox(width: 15),
                       Expanded(
                         child: Text(
                           item.content,
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontSize: 14,
                             fontWeight: FontWeight.w600,
-                            color: Colors.black87,
+                            color: textColor,
                           ),
                         ),
                       ),

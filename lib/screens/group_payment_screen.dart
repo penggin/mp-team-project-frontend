@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../app_colors.dart';
+import '../services/api_service.dart';
 import 'individual_payment_screen.dart';
 import 'main_payment_screen.dart';
 
@@ -214,11 +215,45 @@ class _GroupPaymentScreenState extends State<GroupPaymentScreen>
     });
   }
 
-  // ── 내역 추가 확정 ──
-  void _confirmAdd() {
-    // _addSelected: allTransactions 인덱스 중 새로 추가할 것만 담겨 있음
+  // ── 내역 추가 확정 (PATCH /bundles/{id} 에 새 entry_ids 통째 전송) ──
+  Future<void> _confirmAdd() async {
     if (_addSelected.isEmpty) return;
+    final bundleId = widget.group.bundleId;
+    if (bundleId == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('그룹 ID가 없어 추가할 수 없습니다')),
+      );
+      return;
+    }
+
     final toAdd = _addSelected.map((i) => widget.allTransactions[i]).toList();
+    // 새로운 전체 멤버 = 기존 _items + 추가분
+    final allItems = [..._items, ...toAdd];
+    final newEntryIds = allItems
+        .where((t) => t.id != null && t.id!.isNotEmpty)
+        .map((t) => t.id!)
+        .toList();
+
+    if (newEntryIds.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('선택한 항목에 백엔드 ID가 없습니다')),
+      );
+      return;
+    }
+
+    final ok = await ApiService.updateLedgerBundle(
+      bundleId: bundleId,
+      entryIds: newEntryIds,
+    );
+    if (!mounted) return;
+
+    if (!ok) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('그룹에 항목을 추가하지 못했습니다')),
+      );
+      return;
+    }
+
     final newGrouped = Set<int>.from(widget.groupedIndexes);
     for (final idx in _addSelected) {
       newGrouped.add(idx);
@@ -234,33 +269,57 @@ class _GroupPaymentScreenState extends State<GroupPaymentScreen>
     widget.onGroupUpdated?.call(_items, newGrouped);
   }
 
-  // ── 내역 삭제 확정 ──
-  void _confirmRemove() {
+  // ── 내역 삭제 확정 (PATCH 에 남은 entry_ids 만 전송) ──
+  Future<void> _confirmRemove() async {
     if (_removeSelected.isEmpty) return;
+    final bundleId = widget.group.bundleId;
     final toRemove = _removeSelected.map((i) => _items[i]).toSet();
-    // 메인 groupedIndexes에서도 제거
-    if (widget.onGroupUpdated != null) {
-      final newGrouped = Set<int>.from(widget.groupedIndexes);
-      for (final tx in toRemove) {
-        final mainIdx = widget.allTransactions.indexOf(tx);
-        if (mainIdx != -1) newGrouped.remove(mainIdx);
+    final remaining = _items.where((t) => !toRemove.contains(t)).toList();
+
+    if (bundleId != null) {
+      final remainingIds = remaining
+          .where((t) => t.id != null && t.id!.isNotEmpty)
+          .map((t) => t.id!)
+          .toList();
+
+      // 남은 항목이 없으면 그룹 자체 삭제, 있으면 멤버 교체
+      final ok = remainingIds.isEmpty
+          ? await ApiService.deleteLedgerBundle(bundleId)
+          : await ApiService.updateLedgerBundle(
+              bundleId: bundleId,
+              entryIds: remainingIds,
+            );
+
+      if (!mounted) return;
+      if (!ok) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('그룹에서 항목을 제외하지 못했습니다')),
+        );
+        return;
       }
-      setState(() {
-        _items.removeWhere((tx) => toRemove.contains(tx));
-        _isRemoveMode = false;
-        _removeSelected.clear();
-      });
-      widget.group.items
-        ..clear()
-        ..addAll(_items);
-      widget.onGroupUpdated!(_items, newGrouped);
-    } else {
-      setState(() {
-        _items.removeWhere((tx) => toRemove.contains(tx));
-        _isRemoveMode = false;
-        _removeSelected.clear();
-      });
+
+      // 멤버가 모두 빠져 그룹이 삭제됐다면 화면도 닫음
+      if (remainingIds.isEmpty) {
+        widget.onGroupDeleted?.call();
+        Navigator.pop(context);
+        return;
+      }
     }
+
+    final newGrouped = Set<int>.from(widget.groupedIndexes);
+    for (final tx in toRemove) {
+      final mainIdx = widget.allTransactions.indexOf(tx);
+      if (mainIdx != -1) newGrouped.remove(mainIdx);
+    }
+    setState(() {
+      _items.removeWhere((tx) => toRemove.contains(tx));
+      _isRemoveMode = false;
+      _removeSelected.clear();
+    });
+    widget.group.items
+      ..clear()
+      ..addAll(_items);
+    widget.onGroupUpdated?.call(_items, newGrouped);
   }
 
   // ── 그룹 삭제 ──
@@ -292,8 +351,22 @@ class _GroupPaymentScreenState extends State<GroupPaymentScreen>
               child: Text('취소', style: TextStyle(color: colors.subText)),
             ),
             TextButton(
-              onPressed: () {
+              onPressed: () async {
                 Navigator.pop(context); // 다이얼로그 닫기
+
+                // DELETE /api/v1/ledger/bundles/{id} — 서버가 멤버 해제 + 번들 제거
+                final bundleId = widget.group.bundleId;
+                if (bundleId != null) {
+                  final ok = await ApiService.deleteLedgerBundle(bundleId);
+                  if (!ok && mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('그룹 삭제에 실패했습니다')),
+                    );
+                    return;
+                  }
+                }
+
+                if (!mounted) return;
                 widget.onGroupDeleted?.call();
                 Navigator.pop(context); // GroupPaymentScreen 닫기
               },
