@@ -9,17 +9,6 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:first/screens/notification_screen.dart';
 import 'package:first/services/api_service.dart';
-import 'package:first/services/payment_push_notification_service.dart';
-
-class FakePaymentPushNotificationService
-    extends PaymentPushNotificationService {
-  int requestPermissionCount = 0;
-
-  @override
-  Future<void> requestPermissions() async {
-    requestPermissionCount += 1;
-  }
-}
 
 http.Response jsonResponse(Map<String, dynamic> body, int statusCode) {
   return http.Response.bytes(
@@ -38,37 +27,34 @@ void main() {
   const notificationListenerChannel = MethodChannel(
     'x-slayer/notifications_channel',
   );
-  const localNotificationsChannel = MethodChannel(
-    'dexterous.com/flutter/local_notifications',
-  );
+
+  setUp(() {
+    // 알림 스트림 직접 구독 없음 — 채널 호출이 오면 테스트 실패
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(notificationListenerChannel, (call) async {
+          fail('NotificationScreen must not read notifications directly: ${call.method}');
+        });
+
+    // Foreground task service 재시작 없음 — 채널 호출이 오면 테스트 실패
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(foregroundTaskChannel, (call) async {
+          // addTaskDataCallback / removeTaskDataCallback 은 in-memory 이므로 채널 호출 없음
+          fail('NotificationScreen must not manage the foreground service: ${call.method}');
+        });
+  });
 
   tearDown(() {
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(foregroundTaskChannel, null);
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(notificationListenerChannel, null);
-    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-        .setMockMethodCallHandler(localNotificationsChannel, null);
     ApiService.resetHttpClientForTest();
   });
 
   testWidgets(
-    'NotificationScreen leaves notification ingestion to the background service',
+    'NotificationScreen loads entries from backend and displays them',
     (tester) async {
       SharedPreferences.setMockInitialValues({'access_token': 'access-token'});
-      final pushNotificationService = FakePaymentPushNotificationService();
-
-      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-          .setMockMethodCallHandler(foregroundTaskChannel, (call) async {
-            if (call.method == 'isRunningService') return true;
-            if (call.method == 'updateService') return true;
-            if (call.method == 'restartService') return true;
-            fail('Unexpected foreground task call: ${call.method}');
-          });
-      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-          .setMockMethodCallHandler(notificationListenerChannel, (call) async {
-            fail('Foreground notification reads must not run: ${call.method}');
-          });
 
       ApiService.setHttpClientForTest(
         MockClient((request) async {
@@ -76,66 +62,27 @@ void main() {
           expect(request.url.path, '/api/v1/ledger');
           return jsonResponse({
             'success': true,
-            'data': {'items': []},
+            'data': {
+              'items': [
+                {
+                  'id': 'ledger-1',
+                  'amount': 5600,
+                  'type': 'expense',
+                  'category': 'cafe',
+                  'merchant_name': '스타벅스',
+                },
+              ],
+            },
           }, 200);
         }),
       );
 
       await tester.pumpWidget(
-        MaterialApp(
-          home: NotificationScreen(
-            pushNotificationService: pushNotificationService,
-          ),
-        ),
+        const MaterialApp(home: NotificationScreen()),
       );
       await tester.pumpAndSettle();
 
-      expect(find.text('감지된 결제 내역이 없습니다'), findsOneWidget);
-      expect(pushNotificationService.requestPermissionCount, 1);
-    },
-  );
-
-  testWidgets(
-    'NotificationScreen prepares push notification permissions when service is already running',
-    (tester) async {
-      SharedPreferences.setMockInitialValues({'access_token': 'access-token'});
-      final pushNotificationService = FakePaymentPushNotificationService();
-
-      final foregroundCalls = <String>[];
-
-      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-          .setMockMethodCallHandler(foregroundTaskChannel, (call) async {
-            foregroundCalls.add(call.method);
-            if (call.method == 'isRunningService') return true;
-            if (call.method == 'updateService') return true;
-            if (call.method == 'restartService') return true;
-            fail('Unexpected foreground task call: ${call.method}');
-          });
-
-      ApiService.setHttpClientForTest(
-        MockClient((request) async {
-          expect(request.method, 'GET');
-          expect(request.url.path, '/api/v1/ledger');
-          return jsonResponse({
-            'success': true,
-            'data': {'items': []},
-          }, 200);
-        }),
-      );
-
-      await tester.pumpWidget(
-        MaterialApp(
-          home: NotificationScreen(
-            pushNotificationService: pushNotificationService,
-          ),
-        ),
-      );
-      await tester.pumpAndSettle();
-
-      expect(pushNotificationService.requestPermissionCount, 1);
-      expect(foregroundCalls, contains('isRunningService'));
-      expect(foregroundCalls, contains('updateService'));
-      expect(foregroundCalls, contains('restartService'));
+      expect(find.text('스타벅스에서 5,600원 결제'), findsOneWidget);
     },
   );
 
@@ -181,9 +128,7 @@ void main() {
     );
 
     await tester.pumpWidget(
-      const MaterialApp(
-        home: NotificationScreen(enableBackgroundProcessing: false),
-      ),
+      const MaterialApp(home: NotificationScreen()),
     );
     await tester.pumpAndSettle();
 
@@ -243,9 +188,7 @@ void main() {
       );
 
       await tester.pumpWidget(
-        const MaterialApp(
-          home: NotificationScreen(enableBackgroundProcessing: false),
-        ),
+        const MaterialApp(home: NotificationScreen()),
       );
       await tester.pumpAndSettle();
 
@@ -293,9 +236,7 @@ void main() {
     );
 
     await tester.pumpWidget(
-      const MaterialApp(
-        home: NotificationScreen(enableBackgroundProcessing: false),
-      ),
+      const MaterialApp(home: NotificationScreen()),
     );
     await tester.pumpAndSettle();
 

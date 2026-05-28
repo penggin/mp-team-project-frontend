@@ -8,6 +8,7 @@ import 'category_payment_screen.dart';
 import 'main_payment_screen.dart';
 import '../app_colors.dart';
 import '../background_task_handler.dart';
+import '../services/payment_push_notification_service.dart';
 
 // (나중에 가계부, 마이페이지 만들면 여기 추가)
 
@@ -32,6 +33,9 @@ class MainScreenState extends State<MainScreen> {
   }
 
   Future<void> _startForegroundService() async {
+    // 알림 및 포그라운드 서비스 권한 요청
+    await PaymentPushNotificationService.instance.requestPermissions();
+
     if (await FlutterForegroundTask.isRunningService) return;
     await FlutterForegroundTask.startService(
       serviceId: 256,
@@ -62,20 +66,27 @@ class MainScreenState extends State<MainScreen> {
   // build() 안에서 동적으로 생성시켰니다.
   static final GlobalKey<State<MainPaymentScreen>> _paymentKey =
       GlobalKey<State<MainPaymentScreen>>();
+  static final GlobalKey<State<StatisticsScreen>> _statisticsKey =
+      GlobalKey<State<StatisticsScreen>>();
 
   // 탭을 누르면 실행되는 함수
   void _onItemTapped(int index) {
     setState(() {
       _selectedIndex = index;
-      // ✅ 카테고리 탭(4) 이동 시 잠시 후 다시 setState로
-      //    _paymentKey.currentState가 이미 존재하게 되면 데이터가 전달됨
     });
-    if (index == 4) {
-      // 스케줄러 후 한 프레임 뜜려 상태 동기화
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) setState(() {});
-      });
-    }
+
+    // 탭 전환 시 해당 화면 자동 새로고침 (IndexedStack 캐시 갱신용)
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      if (index == 1) {
+        MainPaymentScreen.reload(_paymentKey);
+      } else if (index == 3) {
+        StatisticsScreen.reload(_statisticsKey);
+      } else if (index == 4) {
+        // 카테고리 탭: 결제이력 데이터를 다시 주입해야 하므로 setState만
+        setState(() {});
+      }
+    });
   }
 
   @override
@@ -95,7 +106,7 @@ class MainScreenState extends State<MainScreen> {
             const SettingsScreen(),
             MainPaymentScreen(key: _paymentKey),
             const HomeScreen(),
-            const StatisticsScreen(),
+            StatisticsScreen(key: _statisticsKey),
             CategoryPaymentScreen(
               transactions: transactions,
               groupedIndexes: groupedIndexes,
