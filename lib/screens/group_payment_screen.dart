@@ -533,10 +533,7 @@ class _GroupPaymentScreenState extends State<GroupPaymentScreen>
                         ),
                       ),
                       const SizedBox(height: 8),
-                      ...expenses.map(
-                        (tx) =>
-                            _buildTxCard(tx, colors, mode: _TxCardMode.normal),
-                      ),
+                      ..._buildDateGroupedCards(expenses, colors),
                       const SizedBox(height: 16),
                     ],
                     if (incomes.isNotEmpty) ...[
@@ -549,10 +546,7 @@ class _GroupPaymentScreenState extends State<GroupPaymentScreen>
                         ),
                       ),
                       const SizedBox(height: 8),
-                      ...incomes.map(
-                        (tx) =>
-                            _buildTxCard(tx, colors, mode: _TxCardMode.normal),
-                      ),
+                      ..._buildDateGroupedCards(incomes, colors),
                     ],
                   ],
 
@@ -770,6 +764,48 @@ class _GroupPaymentScreenState extends State<GroupPaymentScreen>
                 }),
         ),
       );
+    }
+    return widgets;
+  }
+
+  // ── 날짜 구분선을 포함해 카드 목록 생성 ──
+  List<Widget> _buildDateGroupedCards(
+    List<TransactionItem> items,
+    ThemeColors colors,
+  ) {
+    final widgets = <Widget>[];
+    String? lastDate;
+
+    // createdAt 내림차순 정렬 (없으면 원래 순서 유지)
+    final sorted = List<TransactionItem>.from(items)
+      ..sort((a, b) {
+        final aTime = a.createdAt;
+        final bTime = b.createdAt;
+        if (aTime == null && bTime == null) return 0;
+        if (aTime == null) return 1;
+        if (bTime == null) return -1;
+        return bTime.compareTo(aTime);
+      });
+
+    for (final tx in sorted) {
+      if (tx.date != lastDate) {
+        if (lastDate != null) widgets.add(const SizedBox(height: 4));
+        widgets.add(
+          Padding(
+            padding: const EdgeInsets.only(bottom: 6, top: 2),
+            child: Text(
+              tx.date,
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                color: colors.subText,
+              ),
+            ),
+          ),
+        );
+        lastDate = tx.date;
+      }
+      widgets.add(_buildTxCard(tx, colors, mode: _TxCardMode.normal));
     }
     return widgets;
   }

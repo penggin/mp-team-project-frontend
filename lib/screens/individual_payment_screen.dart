@@ -11,6 +11,7 @@ class TransactionItem {
   final bool isIncome;
   final String category;
   final IconData icon;
+  final DateTime? createdAt; // 날짜 정렬용
 
   const TransactionItem({
     required this.date,
@@ -19,6 +20,7 @@ class TransactionItem {
     required this.isIncome,
     required this.category,
     required this.icon,
+    this.createdAt,
   });
 }
 

@@ -218,7 +218,7 @@ class _MainPaymentScreenState extends State<MainPaymentScreen>
     _loadTransactions();
   }
 
-  Future<void> _loadTransactions() async {
+  Future<void> _loadTransactions({bool preserveGroups = false}) async {
     setState(() => _isLoadingTransactions = true);
     final entries = await ApiService.getLedgerEntries(
       year: currentYear,
@@ -226,21 +226,62 @@ class _MainPaymentScreenState extends State<MainPaymentScreen>
     );
     if (!mounted) return;
 
-    setState(() {
-      _transactions
-        ..clear()
-        ..addAll(entries.map(_transactionFromLedgerEntry));
-      _groups.clear();
-      _groupedIndexes.clear();
-      _selectedIndexes.clear();
-      _isGroupSelectMode = false;
-      _isLoadingTransactions = false;
-    });
+    if (preserveGroups && _groups.isNotEmpty) {
+      // 그룹 유지: 새로운 거래 목록을 불러오되 기존 그룹 정보를 복원
+      final newTransactions = entries.map(_transactionFromLedgerEntry).toList();
+
+      // 그룹 아이템의 title+date 기반으로 새 인덱스를 재매핑
+      final newGroupedIndexes = <int>{};
+      final updatedGroups = <TransactionGroup>[];
+
+      for (final group in _groups) {
+        final updatedItems = <TransactionItem>[];
+        for (final oldItem in group.items) {
+          // title과 date가 같은 항목을 새 리스트에서 찾아 매핑
+          final newIdx = newTransactions.indexWhere(
+            (t) => t.title == oldItem.title && t.date == oldItem.date && t.amount == oldItem.amount,
+          );
+          if (newIdx != -1) {
+            newGroupedIndexes.add(newIdx);
+            updatedItems.add(newTransactions[newIdx]);
+          }
+        }
+        if (updatedItems.isNotEmpty) {
+          updatedGroups.add(TransactionGroup(name: group.name, items: updatedItems));
+        }
+      }
+
+      setState(() {
+        _transactions
+          ..clear()
+          ..addAll(newTransactions);
+        _groups
+          ..clear()
+          ..addAll(updatedGroups);
+        _groupedIndexes
+          ..clear()
+          ..addAll(newGroupedIndexes);
+        _selectedIndexes.clear();
+        _isGroupSelectMode = false;
+        _isLoadingTransactions = false;
+      });
+    } else {
+      setState(() {
+        _transactions
+          ..clear()
+          ..addAll(entries.map(_transactionFromLedgerEntry));
+        _groups.clear();
+        _groupedIndexes.clear();
+        _selectedIndexes.clear();
+        _isGroupSelectMode = false;
+        _isLoadingTransactions = false;
+      });
+    }
   }
 
   Future<void> _refreshTransactions() async {
     _closeFab();
-    await _loadTransactions();
+    await _loadTransactions(preserveGroups: true);
   }
 
   TransactionItem _transactionFromLedgerEntry(Map<String, dynamic> entry) {
@@ -262,6 +303,7 @@ class _MainPaymentScreenState extends State<MainPaymentScreen>
       isIncome: isIncome,
       category: category,
       icon: _iconForCategory(category, isIncome: isIncome),
+      createdAt: transactionAt,
     );
   }
 
@@ -605,142 +647,6 @@ class _MainPaymentScreenState extends State<MainPaymentScreen>
                         ),
                       ),
                       const SizedBox(height: 16),
-
-                      // ✅ 그룹 목록 표시
-                      if (_groups.isNotEmpty) ...[
-                        Text(
-                          '그룹',
-                          style: TextStyle(
-                            fontWeight: FontWeight.bold,
-                            color: colors.primaryText,
-                            fontSize: 14,
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-                        ..._groups.map(
-                          (group) => GestureDetector(
-                            onTap: () {
-                              Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (_) => GroupPaymentScreen(
-                                    group: group,
-                                    allTransactions: _transactions,
-                                    groupedIndexes: Set.from(_groupedIndexes),
-                                    onGroupDeleted: () {
-                                      setState(() {
-                                        _groups.remove(group);
-                                        for (final item in group.items) {
-                                          final idx = _transactions.indexOf(
-                                            item,
-                                          );
-                                          if (idx != -1) {
-                                            _groupedIndexes.remove(idx);
-                                          }
-                                        }
-                                      });
-                                    },
-                                    onGroupUpdated:
-                                        (updatedItems, newGroupedIndexes) {
-                                          setState(() {
-                                            _groupedIndexes
-                                              ..clear()
-                                              ..addAll(newGroupedIndexes);
-                                          });
-                                        },
-                                  ),
-                                ),
-                              );
-                            },
-                            child: Container(
-                              margin: const EdgeInsets.only(bottom: 10),
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 18,
-                                vertical: 16,
-                              ),
-                              decoration: BoxDecoration(
-                                color: colors.cardBackground,
-                                borderRadius: BorderRadius.circular(15),
-                              ),
-                              child: Row(
-                                children: [
-                                  Container(
-                                    width: 42,
-                                    height: 42,
-                                    decoration: BoxDecoration(
-                                      color: colors.background,
-                                      shape: BoxShape.circle,
-                                    ),
-                                    child: Icon(
-                                      Icons.group,
-                                      color: colors.primaryText,
-                                      size: 22,
-                                    ),
-                                  ),
-                                  const SizedBox(width: 14),
-                                  Expanded(
-                                    child: Text(
-                                      group.name,
-                                      style: TextStyle(
-                                        fontSize: 15,
-                                        fontWeight: FontWeight.bold,
-                                        color: colors.primaryText,
-                                      ),
-                                    ),
-                                  ),
-                                  Builder(
-                                    builder: (_) {
-                                      int total = 0;
-
-                                      for (final tx in group.items) {
-                                        final raw = tx.amount.replaceAll(
-                                          RegExp(r'[^0-9]'),
-                                          '',
-                                        );
-                                        final amount = int.tryParse(raw) ?? 0;
-
-                                        if (tx.isIncome) {
-                                          total += amount;
-                                        } else {
-                                          total -= amount;
-                                        }
-                                      }
-
-                                      final absTotal = total
-                                          .abs()
-                                          .toString()
-                                          .replaceAllMapped(
-                                            RegExp(r'(\d)(?=(\d{3})+(?!\d))'),
-                                            (m) => '${m[1]},',
-                                          );
-
-                                      final isIncome = total >= 0;
-
-                                      return Text(
-                                        '${isIncome ? '+' : '-'}$absTotal원',
-                                        style: TextStyle(
-                                          fontSize: 14,
-                                          fontWeight: FontWeight.bold,
-                                          color: isIncome
-                                              ? Colors.blue
-                                              : Colors.red,
-                                        ),
-                                      );
-                                    },
-                                  ),
-                                  const SizedBox(width: 4),
-                                  Icon(
-                                    Icons.chevron_right,
-                                    color: colors.subText,
-                                    size: 18,
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-                      ],
                     ],
 
                     // ══════════════════════════════
@@ -974,22 +880,66 @@ class _MainPaymentScreenState extends State<MainPaymentScreen>
   }
 
   List<Widget> _buildTransactionList(ThemeColors colors) {
+    // 그룹을 날짜 순으로 인라인 표시하기 위해 표시할 항목을 리스트로 구성
+    // 각 항목은 {‘type’: ‘tx’, ‘index’: i, ‘date’: ...} 또는 {‘type’: ‘group’, ‘group’: ..., ‘date’: ...}
+    final List<Map<String, dynamic>> displayItems = [];
+
+    // 1) 그룹이 아닌 일반 거래 코드 목록
+    for (int i = 0; i < _transactions.length; i++) {
+      if (_groupedIndexes.contains(i)) continue;
+      final tx = _transactions[i];
+      displayItems.add({
+        'type': 'tx',
+        'index': i,
+        'tx': tx,
+        'sortKey': tx.createdAt ?? DateTime(0),
+        'date': tx.date,
+      });
+    }
+
+    // 2) 그룹: 그룹 내 가장 맨 위(=가장 여리다는 이용 날짜와 가까운) 항목의 createdAt을 sortKey로
+    for (final group in _groups) {
+      DateTime sortKey = DateTime(0);
+      String date = '';
+      for (final item in group.items) {
+        if (item.createdAt != null) {
+          if (item.createdAt!.isAfter(sortKey)) {
+            sortKey = item.createdAt!;
+            date = item.date;
+          }
+        }
+      }
+      if (date.isEmpty && group.items.isNotEmpty) {
+        date = group.items.first.date;
+      }
+      displayItems.add({
+        'type': 'group',
+        'group': group,
+        'sortKey': sortKey,
+        'date': date,
+      });
+    }
+
+    // 3) sortKey 내림차순 정렬 (최신 거래가 위로)
+    displayItems.sort((a, b) {
+      final aKey = a['sortKey'] as DateTime;
+      final bKey = b['sortKey'] as DateTime;
+      return bKey.compareTo(aKey);
+    });
+
     final List<Widget> widgets = [];
     String? lastDate;
 
-    for (int i = 0; i < _transactions.length; i++) {
-      // ✅ 그룹화된 항목은 숨김
-      if (_groupedIndexes.contains(i)) continue;
+    for (final item in displayItems) {
+      final String date = item['date'] as String;
 
-      final tx = _transactions[i];
-
-      if (tx.date != lastDate) {
+      if (date != lastDate) {
         if (lastDate != null) widgets.add(const SizedBox(height: 4));
         widgets.add(
           Padding(
             padding: const EdgeInsets.only(bottom: 8.0, top: 4.0),
             child: Text(
-              tx.date,
+              date,
               style: TextStyle(
                 fontWeight: FontWeight.bold,
                 color: colors.primaryText,
@@ -998,104 +948,200 @@ class _MainPaymentScreenState extends State<MainPaymentScreen>
             ),
           ),
         );
-        lastDate = tx.date;
+        lastDate = date;
       }
 
-      final isSelected = _selectedIndexes.contains(i);
-
-      widgets.add(
-        GestureDetector(
-          onTap: () {
-            if (_isGroupSelectMode) {
-              // ✅ 그룹 선택 모드: 체크박스 토글
-              setState(() {
-                if (isSelected) {
-                  _selectedIndexes.remove(i);
-                } else {
-                  _selectedIndexes.add(i);
-                }
-              });
-            } else {
-              _closeFab();
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (_) => IndividualPaymentScreen(transaction: tx),
-                ),
-              );
-            }
-          },
-          child: AnimatedContainer(
-            duration: const Duration(milliseconds: 150),
-            margin: const EdgeInsets.only(bottom: 10),
-            padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
-            decoration: BoxDecoration(
-              color: isSelected
-                  ? colors.primaryText.withValues(alpha: 0.08)
-                  : colors.cardBackground,
-              borderRadius: BorderRadius.circular(15),
-              border: isSelected
-                  ? Border.all(color: colors.primaryText, width: 1.5)
-                  : null,
-            ),
-            child: Row(
-              children: [
-                // ✅ 그룹 선택 모드일 때 체크박스 표시
-                if (_isGroupSelectMode) ...[
-                  AnimatedContainer(
-                    duration: const Duration(milliseconds: 150),
-                    width: 24,
-                    height: 24,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: isSelected
-                          ? colors.primaryText
-                          : Colors.transparent,
-                      border: Border.all(
-                        color: isSelected ? colors.primaryText : colors.subText,
-                        width: 2,
-                      ),
-                    ),
-                    child: isSelected
-                        ? Icon(Icons.check, size: 14, color: colors.background)
-                        : null,
-                  ),
-                  const SizedBox(width: 12),
-                ],
-                Container(
-                  width: 42,
-                  height: 42,
-                  decoration: BoxDecoration(
-                    color: colors.background,
-                    shape: BoxShape.circle,
-                  ),
-                  child: Icon(tx.icon, color: colors.primaryText, size: 22),
-                ),
-                const SizedBox(width: 14),
-                Expanded(
-                  child: Text(
-                    tx.title,
-                    style: TextStyle(
-                      fontSize: 15,
-                      fontWeight: FontWeight.bold,
-                      color: colors.primaryText,
-                    ),
-                  ),
-                ),
-                Text(
-                  tx.amount,
-                  style: TextStyle(
-                    fontSize: 15,
-                    fontWeight: FontWeight.bold,
-                    color: tx.isIncome ? Colors.blue : Colors.red,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      );
+      if (item['type'] == 'group') {
+        final group = item['group'] as TransactionGroup;
+        widgets.add(_buildGroupCard(group, colors));
+      } else {
+        final int i = item['index'] as int;
+        final tx = item['tx'] as TransactionItem;
+        final isSelected = _selectedIndexes.contains(i);
+        widgets.add(_buildTxCard(i, tx, isSelected, colors));
+      }
     }
     return widgets;
+  }
+
+  Widget _buildGroupCard(TransactionGroup group, ThemeColors colors) {
+    int total = 0;
+    for (final tx in group.items) {
+      final raw = tx.amount.replaceAll(RegExp(r'[^0-9]'), '');
+      final amount = int.tryParse(raw) ?? 0;
+      total += tx.isIncome ? amount : -amount;
+    }
+    final absTotal = total.abs().toString().replaceAllMapped(
+      RegExp(r'(\d)(?=(\d{3})+(?!\d))'),
+      (m) => '${m[1]},',
+    );
+    final isIncome = total >= 0;
+
+    return GestureDetector(
+      onTap: () {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => GroupPaymentScreen(
+              group: group,
+              allTransactions: _transactions,
+              groupedIndexes: Set.from(_groupedIndexes),
+              onGroupDeleted: () {
+                setState(() {
+                  _groups.remove(group);
+                  for (final item in group.items) {
+                    final idx = _transactions.indexOf(item);
+                    if (idx != -1) _groupedIndexes.remove(idx);
+                  }
+                });
+              },
+              onGroupUpdated: (updatedItems, newGroupedIndexes) {
+                setState(() {
+                  _groupedIndexes
+                    ..clear()
+                    ..addAll(newGroupedIndexes);
+                });
+              },
+            ),
+          ),
+        );
+      },
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 10),
+        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
+        decoration: BoxDecoration(
+          color: colors.cardBackground,
+          borderRadius: BorderRadius.circular(15),
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 42,
+              height: 42,
+              decoration: BoxDecoration(
+                color: colors.background,
+                shape: BoxShape.circle,
+              ),
+              child: Icon(Icons.group, color: colors.primaryText, size: 22),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Text(
+                group.name,
+                style: TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.bold,
+                  color: colors.primaryText,
+                ),
+              ),
+            ),
+            Text(
+              '${isIncome ? '+' : '-'}$absTotal원',
+              style: TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.bold,
+                color: isIncome ? Colors.blue : Colors.red,
+              ),
+            ),
+            const SizedBox(width: 4),
+            Icon(Icons.chevron_right, color: colors.subText, size: 18),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTxCard(
+    int i,
+    TransactionItem tx,
+    bool isSelected,
+    ThemeColors colors,
+  ) {
+    return GestureDetector(
+      onTap: () {
+        if (_isGroupSelectMode) {
+          setState(() {
+            if (isSelected) {
+              _selectedIndexes.remove(i);
+            } else {
+              _selectedIndexes.add(i);
+            }
+          });
+        } else {
+          _closeFab();
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => IndividualPaymentScreen(transaction: tx),
+            ),
+          );
+        }
+      },
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 150),
+        margin: const EdgeInsets.only(bottom: 10),
+        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
+        decoration: BoxDecoration(
+          color: isSelected
+              ? colors.primaryText.withValues(alpha: 0.08)
+              : colors.cardBackground,
+          borderRadius: BorderRadius.circular(15),
+          border: isSelected
+              ? Border.all(color: colors.primaryText, width: 1.5)
+              : null,
+        ),
+        child: Row(
+          children: [
+            if (_isGroupSelectMode) ...[
+              AnimatedContainer(
+                duration: const Duration(milliseconds: 150),
+                width: 24,
+                height: 24,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: isSelected ? colors.primaryText : Colors.transparent,
+                  border: Border.all(
+                    color: isSelected ? colors.primaryText : colors.subText,
+                    width: 2,
+                  ),
+                ),
+                child: isSelected
+                    ? Icon(Icons.check, size: 14, color: colors.background)
+                    : null,
+              ),
+              const SizedBox(width: 12),
+            ],
+            Container(
+              width: 42,
+              height: 42,
+              decoration: BoxDecoration(
+                color: colors.background,
+                shape: BoxShape.circle,
+              ),
+              child: Icon(tx.icon, color: colors.primaryText, size: 22),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Text(
+                tx.title,
+                style: TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.bold,
+                  color: colors.primaryText,
+                ),
+              ),
+            ),
+            Text(
+              tx.amount,
+              style: TextStyle(
+                fontSize: 15,
+                fontWeight: FontWeight.bold,
+                color: tx.isIncome ? Colors.blue : Colors.red,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }
