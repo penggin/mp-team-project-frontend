@@ -394,8 +394,8 @@ class _HomeScreenState extends State<HomeScreen> {
       _currentComment = _comments[random.nextInt(_comments.length)];
     });
 
-    // 캐릭터 탭마다 50 XP 지급
-    await ExperienceService.addExp(50);
+    // 캐릭터 탭마다 5 XP 지급
+    await ExperienceService.addExp(5);
     final totalExp = await ExperienceService.getTotalExp();
     final newLevel = ExperienceService.levelFromExp(totalExp);
     if (!mounted) return;
@@ -404,6 +404,7 @@ class _HomeScreenState extends State<HomeScreen> {
     setState(() {
       _prevLevel = _level;
       _level = newLevel;
+      _totalExp = totalExp;
       _expProgress = ExperienceService.expProgress(totalExp);
       if (shouldEvolve) _evolutionPending = true;
     });
@@ -412,6 +413,8 @@ class _HomeScreenState extends State<HomeScreen> {
       await ExperienceService.saveLastLevel(newLevel);
       _xpTimer?.cancel();
       WidgetsBinding.instance.addPostFrameCallback((_) => _triggerEvolution());
+    } else {
+      _refreshCharacterIfNeeded(newLevel);
     }
   }
 

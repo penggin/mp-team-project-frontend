@@ -5,7 +5,6 @@ import 'package:first/app_colors.dart';
 import 'package:first/services/api_service.dart';
 import 'package:first/services/category_mapper.dart';
 import 'main_screen.dart';
-import 'app_drawer.dart';
 
 class LedgerScreen extends StatefulWidget {
   const LedgerScreen({super.key});
@@ -20,7 +19,18 @@ class _LedgerScreenState extends State<LedgerScreen> {
 
   int? selectedDay;
   final ScrollController _scrollController = ScrollController();
+
+  // 날짜별 첫 번째 아이템 key (스크롤 앵커용)
   final Map<String, GlobalKey> _dateKeys = {};
+  // 각 거래 아이템별 key (index → key)
+  final Map<int, GlobalKey> _itemKeys = {};
+
+  // 날짜 선택 시 보여줄 필터된 리스트 (null이면 전체 표시)
+  List<Map<String, dynamic>> get _displayTransactions {
+    if (selectedDay == null) return transactions;
+    final targetDate = '$currentMonth.$selectedDay';
+    return transactions.where((tx) => tx['date'] == targetDate).toList();
+  }
 
   // ✅ 더미 데이터 → 실제 데이터로 교체
   List<Map<String, dynamic>> transactions = [];
@@ -49,11 +59,13 @@ class _LedgerScreenState extends State<LedgerScreen> {
 
       // ✅ API 응답 → 화면용 데이터로 변환
       final converted = entries.map((entry) {
-        final DateTime txDate = DateTime.parse(
+        // toLocal()로 타임존 변환
+        final DateTime txDateRaw = DateTime.parse(
           entry['transaction_at'] ??
               entry['created_at'] ??
               DateTime.now().toIso8601String(),
         );
+        final DateTime txDate = txDateRaw.toLocal();
         final bool isIncome = entry['type'] == 'income';
         final int amount = (entry['amount'] as num).toInt();
         final String formattedAmount = isIncome
@@ -64,8 +76,8 @@ class _LedgerScreenState extends State<LedgerScreen> {
         );
 
         return {
-          'date': '${txDate.month}.${txDate.day}', // ex) '3.31'
-          'fullDate': txDate, // 정렬용 DateTime
+          'date': '${txDate.month}.${txDate.day}',
+          'fullDate': txDate,
           'title': entry['merchant_name'] ?? category,
           'amount': formattedAmount,
           'isIncome': isIncome,
@@ -73,24 +85,26 @@ class _LedgerScreenState extends State<LedgerScreen> {
         };
       }).toList();
 
-      // ✅ 날짜 내림차순 정렬
-      converted.sort(
-        (a, b) =>
-            (b['fullDate'] as DateTime).compareTo(a['fullDate'] as DateTime),
-      );
-
-      // ✅ 현재 월 데이터만 필터링
+      // ✅ 현재 월 데이터만 필터링 (toLocal 변환 후 비교)
       final filtered = converted.where((tx) {
         final date = tx['fullDate'] as DateTime;
         return date.year == currentYear && date.month == currentMonth;
       }).toList();
 
-      // ✅ GlobalKey 생성
-      final newKeys = <String, GlobalKey>{};
-      for (var tx in filtered) {
-        final dateStr = tx['date'] as String;
-        if (!newKeys.containsKey(dateStr)) {
-          newKeys[dateStr] = GlobalKey();
+      // ✅ 날짜 내림차순 정렬
+      filtered.sort(
+        (a, b) =>
+            (b['fullDate'] as DateTime).compareTo(a['fullDate'] as DateTime),
+      );
+
+      // ✅ 날짜별 첫 번째 아이템 GlobalKey & 아이템별 GlobalKey 생성
+      final newDateKeys = <String, GlobalKey>{};
+      final newItemKeys = <int, GlobalKey>{};
+      for (int i = 0; i < filtered.length; i++) {
+        final dateStr = filtered[i]['date'] as String;
+        newItemKeys[i] = GlobalKey();
+        if (!newDateKeys.containsKey(dateStr)) {
+          newDateKeys[dateStr] = newItemKeys[i]!;
         }
       }
 
@@ -98,7 +112,10 @@ class _LedgerScreenState extends State<LedgerScreen> {
         transactions = filtered;
         _dateKeys
           ..clear()
-          ..addAll(newKeys);
+          ..addAll(newDateKeys);
+        _itemKeys
+          ..clear()
+          ..addAll(newItemKeys);
         isLoading = false;
       });
     } catch (e) {
@@ -184,21 +201,24 @@ class _LedgerScreenState extends State<LedgerScreen> {
 
   void _onDaySelected(int day) {
     final targetDate = '$currentMonth.$day';
-    setState(() {
-      selectedDay = day;
-    });
+    // 이미 선택된 날짜 다시 탭하면 선택 해제 (전체 보기)
+    if (selectedDay == day) {
+      setState(() => selectedDay = null);
+      return;
+    }
+    setState(() => selectedDay = day);
 
-    final targetKey = _dateKeys[targetDate];
-    if (targetKey == null) return;
+    // 해당 날짜 데이터 없으면 스크롤 안함
+    final hasData = transactions.any((tx) => tx['date'] == targetDate);
+    if (!hasData) return;
 
+    // 필터링 후 리스트가 재바뀘을 때까지 기다렸다가 맨 위로 이동
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      final ctx = targetKey.currentContext;
-      if (ctx != null) {
-        Scrollable.ensureVisible(
-          ctx,
-          duration: const Duration(milliseconds: 400),
+      if (_scrollController.hasClients) {
+        _scrollController.animateTo(
+          0.0,
+          duration: const Duration(milliseconds: 300),
           curve: Curves.easeInOut,
-          alignment: 0.0,
         );
       }
     });
@@ -222,15 +242,13 @@ class _LedgerScreenState extends State<LedgerScreen> {
 
     return Scaffold(
       backgroundColor: colors.background,
-      drawer: const AppDrawer(),
+      drawer: null,
       appBar: AppBar(
         backgroundColor: colors.background,
         elevation: 0,
-        leading: Builder(
-          builder: (ctx) => IconButton(
-            icon: Icon(Icons.menu, color: colors.primaryText, size: 32),
-            onPressed: () => Scaffold.of(ctx).openDrawer(),
-          ),
+        leading: IconButton(
+          icon: Icon(Icons.arrow_back, color: colors.primaryText, size: 28),
+          onPressed: () => Navigator.pop(context),
         ),
         actions: [
           // ✅ 새로고침 버튼
@@ -442,29 +460,33 @@ class _LedgerScreenState extends State<LedgerScreen> {
                       vertical: 15.0,
                     ),
                     physics: const BouncingScrollPhysics(),
-                    itemCount: transactions.length,
+                    itemCount: _displayTransactions.length,
                     itemBuilder: (context, index) {
-                      final tx = transactions[index];
-                      final itemKey = _dateKeys[tx['date']];
-                      bool isHighlighted =
-                          selectedDay != null &&
-                          tx['date'] == '$currentMonth.$selectedDay';
+                      final tx = _displayTransactions[index];
+                      // 선택된 날짜 필터 시 모두 highlighted
+                      bool isHighlighted = selectedDay != null;
 
                       return Padding(
-                        key: itemKey,
                         padding: const EdgeInsets.only(bottom: 20.0),
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text(
-                              tx['date'],
-                              style: TextStyle(
-                                fontWeight: FontWeight.bold,
-                                color: colors.primaryText,
-                                fontSize: 14,
+                            // 전체 보기일 때만 날짜 헤더 표시
+                            if (selectedDay == null ||
+                                index == 0 ||
+                                _displayTransactions[index - 1]['date'] !=
+                                    tx['date'])
+                              Padding(
+                                padding: const EdgeInsets.only(bottom: 8.0),
+                                child: Text(
+                                  tx['date'],
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    color: colors.primaryText,
+                                    fontSize: 14,
+                                  ),
+                                ),
                               ),
-                            ),
-                            const SizedBox(height: 8),
                             AnimatedContainer(
                               duration: const Duration(milliseconds: 300),
                               padding: const EdgeInsets.all(18),

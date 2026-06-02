@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import 'individual_payment_screen.dart';
 import 'category_select_screen.dart';
 import '../services/api_service.dart';
@@ -6,6 +7,7 @@ import '../services/category_mapper.dart';
 import '../services/experience_service.dart';
 import 'budget_alert_dialog.dart';
 import 'main_screen.dart';
+import '../app_colors.dart';
 
 class AddPaymentScreen extends StatefulWidget {
   final Function(TransactionItem) onAdd;
@@ -113,19 +115,21 @@ class _AddPaymentScreenState extends State<AddPaymentScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.watch<ThemeProvider>().colors;
+
     return Scaffold(
-      backgroundColor: const Color(0xFFFDF8F8),
+      backgroundColor: colors.background,
       appBar: AppBar(
-        backgroundColor: const Color(0xFFFDF8F8),
+        backgroundColor: colors.background,
         elevation: 0,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: Color(0xFF7A1C1C)),
+          icon: Icon(Icons.arrow_back, color: colors.primaryText),
           onPressed: () => Navigator.pop(context),
         ),
         title: Text(
           isIncome ? '입금 추가' : '출금 추가',
-          style: const TextStyle(
-            color: Color(0xFF7A1C1C),
+          style: TextStyle(
+            color: colors.primaryText,
             fontWeight: FontWeight.bold,
           ),
         ),
@@ -141,7 +145,7 @@ class _AddPaymentScreenState extends State<AddPaymentScreen> {
             Container(
               height: 60,
               decoration: BoxDecoration(
-                color: const Color(0xFFF8DCDC),
+                color: colors.cardBackground,
                 borderRadius: BorderRadius.circular(30),
               ),
               child: Row(
@@ -163,7 +167,7 @@ class _AddPaymentScreenState extends State<AddPaymentScreen> {
                           child: Text(
                             '지출',
                             style: TextStyle(
-                              color: const Color(0xFF7A1C1C),
+                              color: colors.primaryText,
                               fontWeight: FontWeight.bold,
                             ),
                           ),
@@ -188,7 +192,7 @@ class _AddPaymentScreenState extends State<AddPaymentScreen> {
                           child: Text(
                             '입금',
                             style: TextStyle(
-                              color: const Color(0xFF7A1C1C),
+                              color: colors.primaryText,
                               fontWeight: FontWeight.bold,
                             ),
                           ),
@@ -204,23 +208,30 @@ class _AddPaymentScreenState extends State<AddPaymentScreen> {
 
             Text(
               '금액을 입력하세요',
-              style: TextStyle(color: Color(0xFF7A1C1C), fontSize: 16),
+              style: TextStyle(color: colors.primaryText, fontSize: 16),
             ),
 
             TextField(
               controller: amountController,
               keyboardType: TextInputType.number,
-              decoration: const InputDecoration(hintText: '0원'),
+              style: TextStyle(color: colors.primaryText),
+              decoration: InputDecoration(
+                hintText: '0원',
+                hintStyle: TextStyle(color: colors.subText),
+              ),
             ),
 
             const SizedBox(height: 40),
 
             Text(
               isIncome ? '입금처를 입력하세요' : '지출처를 입력하세요',
-              style: const TextStyle(color: Color(0xFF7A1C1C), fontSize: 16),
+              style: TextStyle(color: colors.primaryText, fontSize: 16),
             ),
 
-            TextField(controller: titleController),
+            TextField(
+              controller: titleController,
+              style: TextStyle(color: colors.primaryText),
+            ),
 
             const SizedBox(height: 40),
 
@@ -230,7 +241,7 @@ class _AddPaymentScreenState extends State<AddPaymentScreen> {
               children: [
                 Text(
                   '카테고리 선택',
-                  style: TextStyle(color: Color(0xFF7A1C1C), fontSize: 16),
+                  style: TextStyle(color: colors.primaryText, fontSize: 16),
                 ),
                 GestureDetector(
                   onTap: () async {
@@ -252,12 +263,12 @@ class _AddPaymentScreenState extends State<AddPaymentScreen> {
                     children: [
                       Text(
                         selectedCategory,
-                        style: const TextStyle(
-                          color: Color(0xFF7A1C1C),
+                        style: TextStyle(
+                          color: colors.primaryText,
                           fontWeight: FontWeight.w500,
                         ),
                       ),
-                      const Icon(Icons.chevron_right, color: Color(0xFF7A1C1C)),
+                      Icon(Icons.chevron_right, color: colors.primaryText),
                     ],
                   ),
                 ),
@@ -272,14 +283,14 @@ class _AddPaymentScreenState extends State<AddPaymentScreen> {
                 height: 56,
                 margin: const EdgeInsets.only(bottom: 40),
                 decoration: BoxDecoration(
-                  color: const Color(0xFFF8DCDC),
+                  color: colors.cardBackground,
                   borderRadius: BorderRadius.circular(16),
                 ),
                 child: Center(
                   child: Text(
                     _isSaving ? '저장 중...' : '추가하기',
                     style: TextStyle(
-                      color: Color(0xFF7A1C1C),
+                      color: colors.primaryText,
                       fontWeight: FontWeight.bold,
                       fontSize: 18,
                     ),

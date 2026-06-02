@@ -26,7 +26,7 @@ class CategorySummary {
   String get amount {
     final formatted = amountInt.toString().replaceAllMapped(
       RegExp(r'(\d)(?=(\d{3})+(?!\d))'),
-      (m) => '${m[1]},',
+          (m) => '${m[1]},',
     );
     return '$formatted 원';
   }
@@ -60,8 +60,8 @@ class MainPaymentScreen extends StatefulWidget {
 
   // ✅ 외부에서 거래 데이터를 읽을 수 있도록 GlobalKey를 통해 접근
   static List<TransactionItem> transactionsOf(
-    GlobalKey<State<MainPaymentScreen>> key,
-  ) {
+      GlobalKey<State<MainPaymentScreen>> key,
+      ) {
     final s = key.currentState;
     if (s is _MainPaymentScreenState) return s._transactions;
     return [];
@@ -132,11 +132,11 @@ class _MainPaymentScreenState extends State<MainPaymentScreen>
     return entries
         .map(
           (e) => CategorySummary(
-            title: e.key,
-            amountInt: e.value,
-            color: _categoryColors[e.key] ?? const Color(0xFFBDBDBD),
-          ),
-        )
+        title: e.key,
+        amountInt: e.value,
+        color: _categoryColors[e.key] ?? const Color(0xFFBDBDBD),
+      ),
+    )
         .toList();
   }
 
@@ -152,7 +152,7 @@ class _MainPaymentScreenState extends State<MainPaymentScreen>
     }
     final formatted = total.toString().replaceAllMapped(
       RegExp(r'(\d)(?=(\d{3})+(?!\d))'),
-      (m) => '${m[1]},',
+          (m) => '${m[1]},',
     );
     return '$formatted원';
   }
@@ -170,18 +170,18 @@ class _MainPaymentScreenState extends State<MainPaymentScreen>
     );
     _btn1SlideAnim = Tween<Offset>(begin: const Offset(0, 1), end: Offset.zero)
         .animate(
-          CurvedAnimation(
-            parent: _fabAnimController,
-            curve: const Interval(0.0, 0.8, curve: Curves.easeOut),
-          ),
-        );
+      CurvedAnimation(
+        parent: _fabAnimController,
+        curve: const Interval(0.0, 0.8, curve: Curves.easeOut),
+      ),
+    );
     _btn2SlideAnim = Tween<Offset>(begin: const Offset(0, 1), end: Offset.zero)
         .animate(
-          CurvedAnimation(
-            parent: _fabAnimController,
-            curve: const Interval(0.1, 1.0, curve: Curves.easeOut),
-          ),
-        );
+      CurvedAnimation(
+        parent: _fabAnimController,
+        curve: const Interval(0.1, 1.0, curve: Curves.easeOut),
+      ),
+    );
     _overlayAnim = Tween<double>(begin: 0.0, end: 0.3).animate(
       CurvedAnimation(parent: _fabAnimController, curve: Curves.easeOut),
     );
@@ -359,7 +359,7 @@ class _MainPaymentScreenState extends State<MainPaymentScreen>
   String _formatAmount(int amount) {
     return amount.toString().replaceAllMapped(
       RegExp(r'(\d)(?=(\d{3})+(?!\d))'),
-      (m) => '${m[1]},',
+          (m) => '${m[1]},',
     );
   }
 
@@ -464,9 +464,9 @@ class _MainPaymentScreenState extends State<MainPaymentScreen>
     final justCreated = bundleId == null
         ? null
         : _groups
-              .where((g) => g.bundleId == bundleId)
-              .cast<TransactionGroup?>()
-              .firstWhere((g) => true, orElse: () => null);
+        .where((g) => g.bundleId == bundleId)
+        .cast<TransactionGroup?>()
+        .firstWhere((g) => true, orElse: () => null);
 
     if (justCreated == null) return;
 
@@ -501,7 +501,6 @@ class _MainPaymentScreenState extends State<MainPaymentScreen>
           backgroundColor: colors.background,
           elevation: 0,
           leading: _isGroupSelectMode
-              // ✅ 그룹 선택 모드일 때 취소 버튼
               ? TextButton(
                   onPressed: _cancelGroupSelectMode,
                   child: Text(
@@ -520,12 +519,12 @@ class _MainPaymentScreenState extends State<MainPaymentScreen>
                 ),
           title: _isGroupSelectMode
               ? Text(
-                  '항목 선택',
-                  style: TextStyle(
-                    color: colors.primaryText,
-                    fontWeight: FontWeight.bold,
-                  ),
-                )
+            '항목 선택',
+            style: TextStyle(
+              color: colors.primaryText,
+              fontWeight: FontWeight.bold,
+            ),
+          )
               : null,
           actions: [
             if (!_isGroupSelectMode)
@@ -621,7 +620,7 @@ class _MainPaymentScreenState extends State<MainPaymentScreen>
                                   final cats = _categories;
                                   final total = cats.fold(
                                     0,
-                                    (s, c) => s + c.amountInt,
+                                        (s, c) => s + c.amountInt,
                                   );
                                   return Column(
                                     children: [
@@ -631,24 +630,24 @@ class _MainPaymentScreenState extends State<MainPaymentScreen>
                                           height: 20,
                                           child: cats.isEmpty
                                               ? Container(
-                                                  color: const Color(
-                                                    0xFFBDBDBD,
-                                                  ),
-                                                )
+                                            color: const Color(
+                                              0xFFBDBDBD,
+                                            ),
+                                          )
                                               : Row(
-                                                  children: cats
-                                                      .map(
-                                                        (cat) => Expanded(
-                                                          flex: cat.flexOf(
-                                                            total,
-                                                          ),
-                                                          child: Container(
-                                                            color: cat.color,
-                                                          ),
-                                                        ),
-                                                      )
-                                                      .toList(),
+                                            children: cats
+                                                .map(
+                                                  (cat) => Expanded(
+                                                flex: cat.flexOf(
+                                                  total,
                                                 ),
+                                                child: Container(
+                                                  color: cat.color,
+                                                ),
+                                              ),
+                                            )
+                                                .toList(),
+                                          ),
                                         ),
                                       ),
                                       const SizedBox(height: 16),
@@ -658,27 +657,27 @@ class _MainPaymentScreenState extends State<MainPaymentScreen>
                                         children: cats
                                             .map(
                                               (cat) => Row(
-                                                mainAxisSize: MainAxisSize.min,
-                                                children: [
-                                                  Container(
-                                                    width: 10,
-                                                    height: 10,
-                                                    decoration: BoxDecoration(
-                                                      color: cat.color,
-                                                      shape: BoxShape.circle,
-                                                    ),
-                                                  ),
-                                                  const SizedBox(width: 4),
-                                                  Text(
-                                                    cat.title,
-                                                    style: TextStyle(
-                                                      fontSize: 11,
-                                                      color: colors.subText,
-                                                    ),
-                                                  ),
-                                                ],
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: [
+                                              Container(
+                                                width: 10,
+                                                height: 10,
+                                                decoration: BoxDecoration(
+                                                  color: cat.color,
+                                                  shape: BoxShape.circle,
+                                                ),
                                               ),
-                                            )
+                                              const SizedBox(width: 4),
+                                              Text(
+                                                cat.title,
+                                                style: TextStyle(
+                                                  fontSize: 11,
+                                                  color: colors.subText,
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        )
                                             .toList(),
                                       ),
                                     ],
@@ -778,13 +777,13 @@ class _MainPaymentScreenState extends State<MainPaymentScreen>
               builder: (context, child) {
                 return _overlayAnim.value > 0
                     ? GestureDetector(
-                        onTap: _closeFab,
-                        child: Container(
-                          color: Colors.black.withValues(
-                            alpha: _overlayAnim.value,
-                          ),
-                        ),
-                      )
+                  onTap: _closeFab,
+                  child: Container(
+                    color: Colors.black.withValues(
+                      alpha: _overlayAnim.value,
+                    ),
+                  ),
+                )
                     : const SizedBox.shrink();
               },
             ),
@@ -1062,7 +1061,7 @@ class _MainPaymentScreenState extends State<MainPaymentScreen>
     }
     final absTotal = total.abs().toString().replaceAllMapped(
       RegExp(r'(\d)(?=(\d{3})+(?!\d))'),
-      (m) => '${m[1]},',
+          (m) => '${m[1]},',
     );
     final isIncome = total >= 0;
 
@@ -1131,11 +1130,11 @@ class _MainPaymentScreenState extends State<MainPaymentScreen>
   }
 
   Widget _buildTxCard(
-    int i,
-    TransactionItem tx,
-    bool isSelected,
-    ThemeColors colors,
-  ) {
+      int i,
+      TransactionItem tx,
+      bool isSelected,
+      ThemeColors colors,
+      ) {
     return GestureDetector(
       onTap: () {
         if (_isGroupSelectMode) {

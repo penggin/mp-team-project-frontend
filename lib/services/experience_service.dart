@@ -171,13 +171,22 @@ class ExperienceService {
   }
 
   /// 마지막 저장 이후 경과 분만큼 XP 지급.
+  /// 최대 24시간(1440분) 치만 인정하여 오랫동안 앱을 안 켰을 때 레벨이 폭등하는 현상 방지.
   static Future<int> addTimeBasedExp() async {
     final prefs = await SharedPreferences.getInstance();
     final now = DateTime.now().millisecondsSinceEpoch;
-    final last = prefs.getInt(_keyLastSaveMs) ?? now;
+    final last = prefs.getInt(_keyLastSaveMs);
 
-    final diffSeconds = ((now - last) / 60000).floor();
-    final earned = diffSeconds * expPerMinute;
+    // 최초 실행이면 타임스탬프만 저장하고 XP는 지급하지 않음
+    if (last == null) {
+      await prefs.setInt(_keyLastSaveMs, now);
+      return 0;
+    }
+
+    final diffMinutes = ((now - last) / 60000).floor();
+    // 최대 24시간(1440분) 치만 인정
+    final cappedMinutes = diffMinutes.clamp(0, 1440);
+    final earned = cappedMinutes * expPerMinute;
 
     if (earned > 0) {
       final current = prefs.getInt(_keyTotalExp) ?? 0;
