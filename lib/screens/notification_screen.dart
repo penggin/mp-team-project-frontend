@@ -1,10 +1,15 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
+import 'package:notification_listener_service/notification_event.dart';
+import 'package:notification_listener_service/notification_listener_service.dart';
 import '../services/api_service.dart';
 import '../services/category_mapper.dart';
 import '../services/experience_service.dart';
+import '../services/location_service.dart';
+import '../services/notification_processing.dart';
 import 'budget_alert_dialog.dart';
 import 'login_screen.dart';
 import 'main_screen.dart';
@@ -33,26 +38,74 @@ class NotificationScreen extends StatefulWidget {
 class _NotificationScreenState extends State<NotificationScreen> {
   static const Duration _liveRefreshInterval = Duration(seconds: 3);
 
+  // 백그라운드 서비스와 UI가 같은 알림을 중복 처리하지 않도록 방지
+  static final Set<String> _processedNotificationFingerprints = {};
+
   final Color themeSkyBlue = const Color(0xFFE8F6F8);
   final Color themeDarkBlue = const Color(0xFF1E105C);
 
   List<AppNotification> _notifications = [];
   bool _isLoading = true;
   Timer? _liveRefreshTimer;
+  StreamSubscription<ServiceNotificationEvent>? _notificationSubscription;
 
   @override
   void initState() {
     super.initState();
     _loadFromBackend();
     _startLiveRefreshTimer();
+    _listenNotificationsDirect();
     FlutterForegroundTask.addTaskDataCallback(_onReceiveTaskData);
   }
 
   @override
   void dispose() {
     _liveRefreshTimer?.cancel();
+    _notificationSubscription?.cancel();
     FlutterForegroundTask.removeTaskDataCallback(_onReceiveTaskData);
     super.dispose();
+  }
+
+  /// UI 레이어에서 직접 알림 스트림을 수신.
+  /// 백그라운드 서비스가 놓친 결제 알림을 보완하는 역할.
+  void _listenNotificationsDirect() {
+    _notificationSubscription?.cancel();
+    _notificationSubscription = NotificationListenerService.notificationsStream
+        .listen(
+          _handleNotificationEvent,
+          onError: (e) => debugPrint('알림 스트림 에러(직접): $e'),
+          onDone: () => debugPrint('알림 스트림 종료(직접)'),
+        );
+  }
+
+  Future<void> _handleNotificationEvent(ServiceNotificationEvent event) async {
+    final candidate = NotificationProcessing.candidateFromEvent(event);
+    if (candidate == null) return;
+
+    // 백그라운드 서비스 또는 이전 호출이 이미 처리한 알림은 건너뜀
+    if (_processedNotificationFingerprints.contains(candidate.fingerprint)) {
+      return;
+    }
+    _processedNotificationFingerprints.add(candidate.fingerprint);
+
+    debugPrint('알림 감지(직접): ${candidate.rawText}');
+
+    if (!await ApiService.hasValidToken()) return;
+
+    // GPS 좌표 조회 (카테고라이징 정밀도 향상용, 실패 시 null로 진행)
+    final coords = await LocationService.currentCoordinates();
+
+    final parsed = await ApiService.parseTransaction(
+      candidate.rawText,
+      x: coords.x,
+      y: coords.y,
+    );
+    if (parsed == null) return;
+
+    final saved = await ApiService.createLedgerEntry(parsed);
+    if (!saved || !mounted) return;
+
+    await _loadFromBackend();
   }
 
   void _startLiveRefreshTimer() {
