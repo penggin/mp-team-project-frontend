@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../services/api_service.dart';
 
 class SignUpScreen extends StatefulWidget {
@@ -58,6 +59,9 @@ class _SignUpScreenState extends State<SignUpScreen> {
     setState(() => _isLoading = false);
 
     if (result['success'] == true) {
+      // 첫 로그인 플래그 저장 → 로그인 후 캐릭터 선택창 표시
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool('is_first_login', true);
       _showSnackBar('회원가입 성공!');
       Navigator.pop(context);
     } else {

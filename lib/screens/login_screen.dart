@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'main_screen.dart';
 import 'signup_screen.dart';
+import 'character_select_screen.dart';
 import '../app_colors.dart';
 import '../services/api_service.dart';
 
@@ -42,12 +44,26 @@ class _LoginScreenState extends State<LoginScreen> {
     setState(() => _isLoading = false);
 
     if (result['success'] == true) {
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(
-          builder: (context) => MainScreen(key: MainScreen.globalKey),
-        ),
-      );
+      // 첫 로그인(회원가입 직후)이면 캐릭터 선택창으로, 아니면 메인으로
+      final prefs = await SharedPreferences.getInstance();
+      final isFirstLogin = prefs.getBool('is_first_login') ?? false;
+
+      if (!mounted) return;
+      if (isFirstLogin) {
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(
+            builder: (context) => const CharacterSelectScreen(),
+          ),
+        );
+      } else {
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(
+            builder: (context) => MainScreen(key: MainScreen.globalKey),
+          ),
+        );
+      }
     } else {
       _showSnackBar(result['message'] ?? '로그인 실패');
     }

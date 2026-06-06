@@ -30,10 +30,10 @@ class LocationService {
       pos = await Geolocator.getCurrentPosition(
         locationSettings: defaultTargetPlatform == TargetPlatform.android
             ? AndroidSettings(
-                accuracy: LocationAccuracy.medium,
-                forceLocationManager: true,
-                intervalDuration: const Duration(seconds: 1),
-              )
+          accuracy: LocationAccuracy.medium,
+          forceLocationManager: true,
+          intervalDuration: const Duration(seconds: 1),
+        )
             : const LocationSettings(accuracy: LocationAccuracy.medium),
       ).timeout(const Duration(seconds: 15));
 

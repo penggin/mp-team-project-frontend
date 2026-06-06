@@ -80,6 +80,9 @@ flutter:
     - assets/evo_bluewhale.mp4
     - assets/icon.png
     - assets/icon_login.png
+    - assets/horse.png
+    - assets/parrot.png
+    - assets/dolphin.png
 
   # The following line ensures that the Material Icons font is
   # included with your application, so that you can use the icons in
