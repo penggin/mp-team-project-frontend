@@ -41,11 +41,15 @@ class PaymentIngestionWorkflow {
   static Future<PaymentIngestionResult> processCandidate(
     PaymentNotificationCandidate candidate, {
     DateTime? receivedAt,
+    double? x,
+    double? y,
   }) {
     return processText(
       candidate.rawText,
       source: PaymentIngestionSource.notification,
       receivedAt: receivedAt,
+      x: x,
+      y: y,
     );
   }
 
@@ -53,6 +57,8 @@ class PaymentIngestionWorkflow {
     String text, {
     required PaymentIngestionSource source,
     DateTime? receivedAt,
+    double? x,
+    double? y,
   }) async {
     final rawText = NotificationProcessing.normalizeText(text);
     if (!NotificationProcessing.isPaymentText(rawText)) {
@@ -66,6 +72,8 @@ class PaymentIngestionWorkflow {
       rawText,
       source: source.apiValue,
       receivedAt: receivedAt,
+      x: x,
+      y: y,
     );
     if (parsed == null) {
       return PaymentIngestionResult(

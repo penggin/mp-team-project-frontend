@@ -4,6 +4,7 @@ import 'notification_screen.dart';
 import 'package:first/app_colors.dart';
 import 'package:first/services/api_service.dart';
 import 'package:first/services/category_mapper.dart';
+import 'package:first/services/experience_service.dart';
 import 'main_screen.dart';
 
 class LedgerScreen extends StatefulWidget {
@@ -40,6 +41,9 @@ class _LedgerScreenState extends State<LedgerScreen> {
   // ✅ 현재 표시 중인 연/월
   int currentYear = DateTime.now().year;
   int currentMonth = DateTime.now().month;
+
+  // ✅ 소비 페이스 기반 예상 예산 초과일 (이번 달이고 데이터 충분할 때만 세팅)
+  int? _projectedExceedDay;
 
   @override
   void initState() {
@@ -118,6 +122,9 @@ class _LedgerScreenState extends State<LedgerScreen> {
           ..addAll(newItemKeys);
         isLoading = false;
       });
+
+      // ✅ 소비 페이스 기반 예상 초과일 계산
+      await _computeProjectedExceedDay();
     } catch (e) {
       setState(() {
         errorMessage = '데이터를 불러오지 못했습니다.\n$e';
@@ -229,6 +236,72 @@ class _LedgerScreenState extends State<LedgerScreen> {
     return DateTime(year, month + 1, 0).day;
   }
 
+  /// 소비 페이스 기반 예상 예산 초과일 계산.
+  /// 조건: 현재 달 + 월 예산 > 0 + 누적 지출 >= 월 예산의 1/10
+  /// 결과: 그 날부터 월 마지막 날까지 달력에서 빨갛게 표시. 안전하면 null.
+  Future<void> _computeProjectedExceedDay() async {
+    final now = DateTime.now();
+
+    // 과거/미래 달은 페이스 표시 안 함
+    if (currentYear != now.year || currentMonth != now.month) {
+      if (mounted) setState(() => _projectedExceedDay = null);
+      return;
+    }
+
+    final monthlyBudget = await ExperienceService.getMonthlyBudget();
+    if (monthlyBudget <= 0) {
+      if (mounted) setState(() => _projectedExceedDay = null);
+      return;
+    }
+
+    // 오늘까지 누적 지출 계산 (미래 거래는 제외)
+    int cumSpend = 0;
+    for (final tx in transactions) {
+      if (tx['isIncome'] == true) continue;
+      final txDate = tx['fullDate'] as DateTime;
+      if (txDate.day > now.day) continue;
+      final amountStr = (tx['amount'] as String).replaceAll(
+        RegExp(r'[^0-9]'),
+        '',
+      );
+      cumSpend += int.tryParse(amountStr) ?? 0;
+    }
+
+    // 데이터 부족 (월 예산의 1/10 미만 사용)
+    if (cumSpend * 10 < monthlyBudget) {
+      if (mounted) setState(() => _projectedExceedDay = null);
+      return;
+    }
+
+    final totalDays = _daysInMonth(currentYear, currentMonth);
+    final today = now.day;
+
+    // 이미 초과한 경우: 오늘부터 빨강
+    if (cumSpend >= monthlyBudget) {
+      if (mounted) setState(() => _projectedExceedDay = today);
+      return;
+    }
+
+    // 일평균 지출 기반 예상 초과일
+    final dailyAverage = cumSpend / today;
+    if (dailyAverage <= 0) {
+      if (mounted) setState(() => _projectedExceedDay = null);
+      return;
+    }
+
+    final remaining = monthlyBudget - cumSpend;
+    final daysUntilExceed = (remaining / dailyAverage).floor();
+    final projectedDay = today + daysUntilExceed + 1; // 초과가 발생하는 첫 날
+
+    // 이번 달 안에 초과 안 함 → 안전
+    if (projectedDay > totalDays) {
+      if (mounted) setState(() => _projectedExceedDay = null);
+      return;
+    }
+
+    if (mounted) setState(() => _projectedExceedDay = projectedDay);
+  }
+
   @override
   void dispose() {
     _scrollController.dispose();
@@ -315,6 +388,29 @@ class _LedgerScreenState extends State<LedgerScreen> {
                     ),
                   ],
                 ),
+                if (_projectedExceedDay != null) ...[
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      Icon(
+                        Icons.warning_amber_rounded,
+                        size: 16,
+                        color: expenseColor,
+                      ),
+                      const SizedBox(width: 4),
+                      Expanded(
+                        child: Text(
+                          '현재 소비 페이스로는 $_projectedExceedDay일경 예산을 초과할 것 같아요',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: expenseColor,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
                 const SizedBox(height: 20),
 
                 // ✅ 달력 그리드 (실제 날짜 수 기반)
@@ -332,6 +428,11 @@ class _LedgerScreenState extends State<LedgerScreen> {
                     bool hasTransaction = _dateKeys.containsKey(
                       '$currentMonth.$day',
                     );
+
+                    // ✅ 소비 페이스 기반 예상 초과일 이후 빨간색 표시
+                    final exceedDay = _projectedExceedDay;
+                    final isOverPace =
+                        exceedDay != null && day >= exceedDay;
 
                     // ✅ 실제 수입/지출 금액 표시
                     final summary = _getDaySummary(day);
@@ -351,16 +452,27 @@ class _LedgerScreenState extends State<LedgerScreen> {
                                     color: colors.primaryText,
                                     shape: BoxShape.circle,
                                   )
-                                : null,
+                                : (isOverPace
+                                      ? BoxDecoration(
+                                          color: expenseColor.withValues(
+                                            alpha: 0.18,
+                                          ),
+                                          shape: BoxShape.circle,
+                                        )
+                                      : null),
                             child: Center(
                               child: Text(
                                 '$day',
                                 style: TextStyle(
                                   fontSize: 14,
-                                  fontWeight: FontWeight.w500,
+                                  fontWeight: isOverPace
+                                      ? FontWeight.bold
+                                      : FontWeight.w500,
                                   color: isSelected
                                       ? colors.background
-                                      : colors.primaryText,
+                                      : (isOverPace
+                                            ? expenseColor
+                                            : colors.primaryText),
                                 ),
                               ),
                             ),

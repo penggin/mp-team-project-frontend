@@ -6,6 +6,7 @@ import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:notification_listener_service/notification_event.dart';
 import 'package:notification_listener_service/notification_listener_service.dart';
 import 'services/api_service.dart';
+import 'services/location_service.dart';
 import 'services/notification_processing.dart';
 import 'services/payment_ingestion_workflow.dart';
 import 'services/payment_push_notification_service.dart';
@@ -115,9 +116,17 @@ class PaymentTaskHandler extends TaskHandler {
 
     debugPrint('백그라운드 알림 감지: ${candidate.rawText}');
 
-    final result =
-        await (_candidateProcessor ??
-            PaymentIngestionWorkflow.processCandidate)(candidate);
+    // GPS 좌표 조회 (카테고라이징 정밀도 향상용, 실패 시 null로 진행)
+    final coords = await LocationService.currentCoordinates();
+
+    final candidateProcessor = _candidateProcessor;
+    final result = await (candidateProcessor != null
+        ? candidateProcessor(candidate)
+        : PaymentIngestionWorkflow.processCandidate(
+            candidate,
+            x: coords.x,
+            y: coords.y,
+          ));
     if (!result.saved) {
       debugPrint('백그라운드 알림 처리 결과: ${result.status.name}');
       return;

@@ -10,6 +10,7 @@ import 'app_drawer.dart';
 import 'package:first/app_colors.dart';
 import '../services/experience_service.dart';
 import '../services/api_service.dart';
+import '../services/location_service.dart';
 import 'budget_alert_dialog.dart';
 import 'main_screen.dart';
 
@@ -386,6 +387,9 @@ class _HomeScreenState extends State<HomeScreen> {
     } catch (e) {
       print('권한 요청 에러: $e');
     }
+    // 위치 권한 요청 (백그라운드 isolate에서는 권한 요청이 불가능하므로
+    // UI 진입 시 미리 받아둬야 GPS 좌표 기반 카테고라이징이 동작함)
+    await LocationService.ensurePermission();
   }
 
   Future<void> _generateRandomComment() async {
