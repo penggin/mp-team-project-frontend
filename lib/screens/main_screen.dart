@@ -8,6 +8,7 @@ import 'category_payment_screen.dart';
 import 'main_payment_screen.dart';
 import '../app_colors.dart';
 import '../background_task_handler.dart';
+import '../services/location_service.dart';
 import '../services/payment_push_notification_service.dart';
 
 class MainScreen extends StatefulWidget {
@@ -54,6 +55,7 @@ class MainScreenState extends State<MainScreen> {
 
   Future<void> _startForegroundService() async {
     await PaymentPushNotificationService.instance.requestPermissions();
+    await LocationService.ensurePermission();
     if (await FlutterForegroundTask.isRunningService) return;
     await FlutterForegroundTask.startService(
       serviceId: 256,
