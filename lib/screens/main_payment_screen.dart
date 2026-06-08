@@ -26,7 +26,7 @@ class CategorySummary {
   String get amount {
     final formatted = amountInt.toString().replaceAllMapped(
       RegExp(r'(\d)(?=(\d{3})+(?!\d))'),
-          (m) => '${m[1]},',
+      (m) => '${m[1]},',
     );
     return '$formatted 원';
   }
@@ -44,11 +44,25 @@ class TransactionGroup {
   final String name;
   final List<TransactionItem> items;
   final String? bundleId; // 백엔드 bundle_id (서버 동기화용)
+  final DateTime? bundleDate;
 
   TransactionGroup({
     required this.name,
     required this.items,
     this.bundleId,
+    this.bundleDate,
+  });
+
+  String? get id => bundleId;
+}
+
+class MainPaymentGroupingState {
+  final List<TransactionGroup> groups;
+  final Set<int> groupedIndexes;
+
+  const MainPaymentGroupingState({
+    required this.groups,
+    required this.groupedIndexes,
   });
 }
 
@@ -60,8 +74,8 @@ class MainPaymentScreen extends StatefulWidget {
 
   // ✅ 외부에서 거래 데이터를 읽을 수 있도록 GlobalKey를 통해 접근
   static List<TransactionItem> transactionsOf(
-      GlobalKey<State<MainPaymentScreen>> key,
-      ) {
+    GlobalKey<State<MainPaymentScreen>> key,
+  ) {
     final s = key.currentState;
     if (s is _MainPaymentScreenState) return s._transactions;
     return [];
@@ -77,6 +91,52 @@ class MainPaymentScreen extends StatefulWidget {
   static void reload(GlobalKey<State<MainPaymentScreen>> key) {
     final s = key.currentState;
     if (s is _MainPaymentScreenState) s._loadTransactions();
+  }
+
+  static MainPaymentGroupingState buildGroupingState(
+    List<TransactionItem> transactions,
+    List<Map<String, dynamic>> bundles,
+  ) {
+    final byBundle = <String, List<int>>{};
+    for (var i = 0; i < transactions.length; i++) {
+      final bundleId = transactions[i].bundleId;
+      if (bundleId != null && bundleId.isNotEmpty) {
+        byBundle.putIfAbsent(bundleId, () => []).add(i);
+      }
+    }
+
+    final bundleMetadata = <String, Map<String, dynamic>>{};
+    for (final bundle in bundles) {
+      final id = bundle['id']?.toString();
+      if (id != null && id.isNotEmpty) bundleMetadata[id] = bundle;
+    }
+
+    final groups = <TransactionGroup>[];
+    final groupedIndexes = <int>{};
+    var autoCounter = 1;
+    for (final entry in byBundle.entries) {
+      final bundleId = entry.key;
+      final indexes = entry.value;
+      final metadata = bundleMetadata[bundleId];
+      final name = metadata?['name']?.toString();
+      final bundleDate = DateTime.tryParse(
+        metadata?['bundle_date']?.toString() ?? '',
+      );
+      groups.add(
+        TransactionGroup(
+          name: name == null || name.isEmpty ? '그룹${autoCounter++}' : name,
+          items: indexes.map((i) => transactions[i]).toList(),
+          bundleId: bundleId,
+          bundleDate: bundleDate,
+        ),
+      );
+      groupedIndexes.addAll(indexes);
+    }
+
+    return MainPaymentGroupingState(
+      groups: groups,
+      groupedIndexes: groupedIndexes,
+    );
   }
 }
 
@@ -132,11 +192,11 @@ class _MainPaymentScreenState extends State<MainPaymentScreen>
     return entries
         .map(
           (e) => CategorySummary(
-        title: e.key,
-        amountInt: e.value,
-        color: _categoryColors[e.key] ?? const Color(0xFFBDBDBD),
-      ),
-    )
+            title: e.key,
+            amountInt: e.value,
+            color: _categoryColors[e.key] ?? const Color(0xFFBDBDBD),
+          ),
+        )
         .toList();
   }
 
@@ -152,7 +212,7 @@ class _MainPaymentScreenState extends State<MainPaymentScreen>
     }
     final formatted = total.toString().replaceAllMapped(
       RegExp(r'(\d)(?=(\d{3})+(?!\d))'),
-          (m) => '${m[1]},',
+      (m) => '${m[1]},',
     );
     return '$formatted원';
   }
@@ -170,18 +230,18 @@ class _MainPaymentScreenState extends State<MainPaymentScreen>
     );
     _btn1SlideAnim = Tween<Offset>(begin: const Offset(0, 1), end: Offset.zero)
         .animate(
-      CurvedAnimation(
-        parent: _fabAnimController,
-        curve: const Interval(0.0, 0.8, curve: Curves.easeOut),
-      ),
-    );
+          CurvedAnimation(
+            parent: _fabAnimController,
+            curve: const Interval(0.0, 0.8, curve: Curves.easeOut),
+          ),
+        );
     _btn2SlideAnim = Tween<Offset>(begin: const Offset(0, 1), end: Offset.zero)
         .animate(
-      CurvedAnimation(
-        parent: _fabAnimController,
-        curve: const Interval(0.1, 1.0, curve: Curves.easeOut),
-      ),
-    );
+          CurvedAnimation(
+            parent: _fabAnimController,
+            curve: const Interval(0.1, 1.0, curve: Curves.easeOut),
+          ),
+        );
     _overlayAnim = Tween<double>(begin: 0.0, end: 0.3).animate(
       CurvedAnimation(parent: _fabAnimController, curve: Curves.easeOut),
     );
@@ -237,7 +297,9 @@ class _MainPaymentScreenState extends State<MainPaymentScreen>
       year: currentYear,
       month: currentMonth,
     );
-    print('[결제이력] year=$currentYear month=$currentMonth 필터 결과: ${entries.length}개');
+    print(
+      '[결제이력] year=$currentYear month=$currentMonth 필터 결과: ${entries.length}개',
+    );
 
     // 2) 비어있으면 백엔드가 필터를 무시했거나 미지원 — 전체 받아서 클라이언트 필터
     if (entries.isEmpty) {
@@ -272,38 +334,17 @@ class _MainPaymentScreenState extends State<MainPaymentScreen>
 
     final newTransactions = entries.map(_transactionFromLedgerEntry).toList();
 
-    // bundle_id 별로 모은 후, GET /api/v1/ledger/bundles 로 이름 매핑
-    final Map<String, List<int>> byBundle = {};
-    for (int i = 0; i < newTransactions.length; i++) {
-      final bid = newTransactions[i].bundleId;
-      if (bid != null && bid.isNotEmpty) {
-        byBundle.putIfAbsent(bid, () => []).add(i);
-      }
-    }
-
-    final Map<String, String> bundleNames = {};
-    if (byBundle.isNotEmpty) {
-      final bundles = await ApiService.getLedgerBundles();
-      for (final b in bundles) {
-        final id = b['id']?.toString();
-        final name = b['name']?.toString();
-        if (id != null && name != null) bundleNames[id] = name;
-      }
-    }
-
-    final newGroups = <TransactionGroup>[];
-    final newGroupedIndexes = <int>{};
-    int autoCounter = 1;
-    for (final entry in byBundle.entries) {
-      final bundleId = entry.key;
-      final indexes = entry.value;
-      final items = indexes.map((i) => newTransactions[i]).toList();
-      final name = bundleNames[bundleId] ?? '그룹${autoCounter++}';
-      newGroups.add(
-        TransactionGroup(name: name, items: items, bundleId: bundleId),
-      );
-      newGroupedIndexes.addAll(indexes);
-    }
+    final bundles =
+        newTransactions.any(
+          (transaction) =>
+              transaction.bundleId != null && transaction.bundleId!.isNotEmpty,
+        )
+        ? await ApiService.getLedgerBundles()
+        : <Map<String, dynamic>>[];
+    final groupingState = MainPaymentScreen.buildGroupingState(
+      newTransactions,
+      bundles,
+    );
 
     setState(() {
       _transactions
@@ -311,10 +352,10 @@ class _MainPaymentScreenState extends State<MainPaymentScreen>
         ..addAll(newTransactions);
       _groups
         ..clear()
-        ..addAll(newGroups);
+        ..addAll(groupingState.groups);
       _groupedIndexes
         ..clear()
-        ..addAll(newGroupedIndexes);
+        ..addAll(groupingState.groupedIndexes);
       _selectedIndexes.clear();
       _isGroupSelectMode = false;
       _isLoadingTransactions = false;
@@ -359,7 +400,7 @@ class _MainPaymentScreenState extends State<MainPaymentScreen>
   String _formatAmount(int amount) {
     return amount.toString().replaceAllMapped(
       RegExp(r'(\d)(?=(\d{3})+(?!\d))'),
-          (m) => '${m[1]},',
+      (m) => '${m[1]},',
     );
   }
 
@@ -416,9 +457,7 @@ class _MainPaymentScreenState extends State<MainPaymentScreen>
 
     if (entryIds.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('선택한 항목에 백엔드 ID가 없어 그룹화할 수 없습니다'),
-        ),
+        const SnackBar(content: Text('선택한 항목에 백엔드 ID가 없어 그룹화할 수 없습니다')),
       );
       return;
     }
@@ -442,9 +481,9 @@ class _MainPaymentScreenState extends State<MainPaymentScreen>
 
     if (!mounted) return;
     if (bundle == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('그룹 생성 실패 — 서버 응답 오류')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('그룹 생성 실패 — 서버 응답 오류')));
       return;
     }
 
@@ -464,9 +503,9 @@ class _MainPaymentScreenState extends State<MainPaymentScreen>
     final justCreated = bundleId == null
         ? null
         : _groups
-        .where((g) => g.bundleId == bundleId)
-        .cast<TransactionGroup?>()
-        .firstWhere((g) => true, orElse: () => null);
+              .where((g) => g.bundleId == bundleId)
+              .cast<TransactionGroup?>()
+              .firstWhere((g) => true, orElse: () => null);
 
     if (justCreated == null) return;
 
@@ -519,12 +558,12 @@ class _MainPaymentScreenState extends State<MainPaymentScreen>
                 ),
           title: _isGroupSelectMode
               ? Text(
-            '항목 선택',
-            style: TextStyle(
-              color: colors.primaryText,
-              fontWeight: FontWeight.bold,
-            ),
-          )
+                  '항목 선택',
+                  style: TextStyle(
+                    color: colors.primaryText,
+                    fontWeight: FontWeight.bold,
+                  ),
+                )
               : null,
           actions: [
             if (!_isGroupSelectMode)
@@ -620,7 +659,7 @@ class _MainPaymentScreenState extends State<MainPaymentScreen>
                                   final cats = _categories;
                                   final total = cats.fold(
                                     0,
-                                        (s, c) => s + c.amountInt,
+                                    (s, c) => s + c.amountInt,
                                   );
                                   return Column(
                                     children: [
@@ -630,24 +669,24 @@ class _MainPaymentScreenState extends State<MainPaymentScreen>
                                           height: 20,
                                           child: cats.isEmpty
                                               ? Container(
-                                            color: const Color(
-                                              0xFFBDBDBD,
-                                            ),
-                                          )
+                                                  color: const Color(
+                                                    0xFFBDBDBD,
+                                                  ),
+                                                )
                                               : Row(
-                                            children: cats
-                                                .map(
-                                                  (cat) => Expanded(
-                                                flex: cat.flexOf(
-                                                  total,
+                                                  children: cats
+                                                      .map(
+                                                        (cat) => Expanded(
+                                                          flex: cat.flexOf(
+                                                            total,
+                                                          ),
+                                                          child: Container(
+                                                            color: cat.color,
+                                                          ),
+                                                        ),
+                                                      )
+                                                      .toList(),
                                                 ),
-                                                child: Container(
-                                                  color: cat.color,
-                                                ),
-                                              ),
-                                            )
-                                                .toList(),
-                                          ),
                                         ),
                                       ),
                                       const SizedBox(height: 16),
@@ -657,27 +696,27 @@ class _MainPaymentScreenState extends State<MainPaymentScreen>
                                         children: cats
                                             .map(
                                               (cat) => Row(
-                                            mainAxisSize: MainAxisSize.min,
-                                            children: [
-                                              Container(
-                                                width: 10,
-                                                height: 10,
-                                                decoration: BoxDecoration(
-                                                  color: cat.color,
-                                                  shape: BoxShape.circle,
-                                                ),
+                                                mainAxisSize: MainAxisSize.min,
+                                                children: [
+                                                  Container(
+                                                    width: 10,
+                                                    height: 10,
+                                                    decoration: BoxDecoration(
+                                                      color: cat.color,
+                                                      shape: BoxShape.circle,
+                                                    ),
+                                                  ),
+                                                  const SizedBox(width: 4),
+                                                  Text(
+                                                    cat.title,
+                                                    style: TextStyle(
+                                                      fontSize: 11,
+                                                      color: colors.subText,
+                                                    ),
+                                                  ),
+                                                ],
                                               ),
-                                              const SizedBox(width: 4),
-                                              Text(
-                                                cat.title,
-                                                style: TextStyle(
-                                                  fontSize: 11,
-                                                  color: colors.subText,
-                                                ),
-                                              ),
-                                            ],
-                                          ),
-                                        )
+                                            )
                                             .toList(),
                                       ),
                                     ],
@@ -777,13 +816,13 @@ class _MainPaymentScreenState extends State<MainPaymentScreen>
               builder: (context, child) {
                 return _overlayAnim.value > 0
                     ? GestureDetector(
-                  onTap: _closeFab,
-                  child: Container(
-                    color: Colors.black.withValues(
-                      alpha: _overlayAnim.value,
-                    ),
-                  ),
-                )
+                        onTap: _closeFab,
+                        child: Container(
+                          color: Colors.black.withValues(
+                            alpha: _overlayAnim.value,
+                          ),
+                        ),
+                      )
                     : const SizedBox.shrink();
               },
             ),
@@ -1061,7 +1100,7 @@ class _MainPaymentScreenState extends State<MainPaymentScreen>
     }
     final absTotal = total.abs().toString().replaceAllMapped(
       RegExp(r'(\d)(?=(\d{3})+(?!\d))'),
-          (m) => '${m[1]},',
+      (m) => '${m[1]},',
     );
     final isIncome = total >= 0;
 
@@ -1130,11 +1169,11 @@ class _MainPaymentScreenState extends State<MainPaymentScreen>
   }
 
   Widget _buildTxCard(
-      int i,
-      TransactionItem tx,
-      bool isSelected,
-      ThemeColors colors,
-      ) {
+    int i,
+    TransactionItem tx,
+    bool isSelected,
+    ThemeColors colors,
+  ) {
     return GestureDetector(
       onTap: () {
         if (_isGroupSelectMode) {

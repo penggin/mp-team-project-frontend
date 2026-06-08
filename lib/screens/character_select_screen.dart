@@ -112,7 +112,9 @@ class _CharacterSelectScreenState extends State<CharacterSelectScreen> {
                     style: ElevatedButton.styleFrom(
                       backgroundColor: colors.accent,
                       foregroundColor: Colors.white,
-                      disabledBackgroundColor: colors.accent.withOpacity(0.4),
+                      disabledBackgroundColor: colors.accent.withValues(
+                        alpha: 0.4,
+                      ),
                       minimumSize: const Size.fromHeight(54),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(30),
@@ -121,21 +123,21 @@ class _CharacterSelectScreenState extends State<CharacterSelectScreen> {
                     ),
                     child: _isLoading
                         ? const SizedBox(
-                      height: 22,
-                      width: 22,
-                      child: CircularProgressIndicator(
-                        color: Colors.white,
-                        strokeWidth: 2.5,
-                      ),
-                    )
+                            height: 22,
+                            width: 22,
+                            child: CircularProgressIndicator(
+                              color: Colors.white,
+                              strokeWidth: 2.5,
+                            ),
+                          )
                         : Text(
-                      '선택했어요',
-                      style: TextStyle(
-                        fontSize: 17,
-                        fontWeight: FontWeight.bold,
-                        color: colors.primaryText,
-                      ),
-                    ),
+                            '선택했어요',
+                            style: TextStyle(
+                              fontSize: 17,
+                              fontWeight: FontWeight.bold,
+                              color: colors.primaryText,
+                            ),
+                          ),
                   ),
                 ),
               ],
@@ -194,8 +196,8 @@ class _CharacterCard extends StatelessWidget {
           boxShadow: [
             BoxShadow(
               color: isSelected
-                  ? accentColor.withOpacity(0.4)
-                  : Colors.black.withOpacity(0.07),
+                  ? accentColor.withValues(alpha: 0.4)
+                  : Colors.black.withValues(alpha: 0.07),
               blurRadius: isSelected ? 14 : 6,
               offset: const Offset(0, 3),
             ),
@@ -213,8 +215,9 @@ class _CharacterCard extends StatelessWidget {
                       character.imagePath,
                       fit: BoxFit.contain,
                       color: character.enabled ? null : Colors.grey,
-                      colorBlendMode:
-                      character.enabled ? null : BlendMode.saturation,
+                      colorBlendMode: character.enabled
+                          ? null
+                          : BlendMode.saturation,
                     ),
                   ),
                 ),
@@ -237,7 +240,7 @@ class _CharacterCard extends StatelessWidget {
               Positioned.fill(
                 child: Container(
                   decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.5),
+                    color: Colors.white.withValues(alpha: 0.5),
                     borderRadius: BorderRadius.circular(17),
                   ),
                   child: Align(
@@ -246,7 +249,9 @@ class _CharacterCard extends StatelessWidget {
                       padding: const EdgeInsets.all(8),
                       child: Container(
                         padding: const EdgeInsets.symmetric(
-                            horizontal: 6, vertical: 3),
+                          horizontal: 6,
+                          vertical: 3,
+                        ),
                         decoration: BoxDecoration(
                           color: Colors.grey.shade300,
                           borderRadius: BorderRadius.circular(8),

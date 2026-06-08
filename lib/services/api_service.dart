@@ -455,11 +455,11 @@ class ApiService {
       final data = await request(
         'POST',
         '/api/v1/ledger/bundles',
-        body: {
+        body: _withoutNullValues({
           'name': name,
           'bundle_date': _formatYmd(bundleDate),
-          if (entryIds != null) 'entry_ids': entryIds,
-        },
+          'entry_ids': entryIds,
+        }),
       );
       print('번들 생성 응답: $data');
       if (_isSuccessfulResponse(data)) {
@@ -485,11 +485,11 @@ class ApiService {
     List<String>? entryIds,
   }) async {
     try {
-      final body = <String, dynamic>{
-        if (name != null) 'name': name,
-        if (bundleDate != null) 'bundle_date': _formatYmd(bundleDate),
-        if (entryIds != null) 'entry_ids': entryIds,
-      };
+      final body = _withoutNullValues({
+        'name': name,
+        'bundle_date': bundleDate == null ? null : _formatYmd(bundleDate),
+        'entry_ids': entryIds,
+      });
       final data = await request(
         'PATCH',
         '/api/v1/ledger/bundles/$bundleId',
@@ -506,10 +506,7 @@ class ApiService {
   /// 그룹(bundle) 삭제
   static Future<bool> deleteLedgerBundle(String bundleId) async {
     try {
-      final data = await request(
-        'DELETE',
-        '/api/v1/ledger/bundles/$bundleId',
-      );
+      final data = await request('DELETE', '/api/v1/ledger/bundles/$bundleId');
       print('번들 삭제($bundleId) 응답: $data');
       return _isSuccessfulResponse(data);
     } catch (e) {
@@ -759,6 +756,25 @@ class ApiService {
       }
     } catch (e) {
       print('펫 정보 수정 에러: $e');
+    }
+    return null;
+  }
+
+  static Future<Map<String, dynamic>?> interactWithPet(String action) async {
+    try {
+      final data = await request(
+        'POST',
+        '/api/v1/pet/interact',
+        body: {'action': action},
+      );
+      print('펫 상호작용 응답: $data');
+      if (_isSuccessfulResponse(data)) {
+        final pet = data?['data'];
+        if (pet is Map<String, dynamic>) return pet;
+        if (pet is Map) return Map<String, dynamic>.from(pet);
+      }
+    } catch (e) {
+      print('펫 상호작용 에러: $e');
     }
     return null;
   }

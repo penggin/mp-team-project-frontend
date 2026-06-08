@@ -3,19 +3,13 @@ import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 
 import 'payment_ingestion_workflow.dart';
 
-typedef ForegroundNotificationUpdater =
-    Future<void> Function({required String title, required String body});
 typedef UserNotificationPresenter =
     Future<void> Function({required String title, required String body});
 
 class PaymentPushNotificationService {
   PaymentPushNotificationService({
-    ForegroundNotificationUpdater? foregroundNotificationUpdater,
     UserNotificationPresenter? userNotificationPresenter,
-  }) : _foregroundNotificationUpdater =
-           foregroundNotificationUpdater ??
-           _updateForegroundServiceNotification,
-       _userNotificationPresenter =
+  }) : _userNotificationPresenter =
            userNotificationPresenter ?? _showUserVisibleNotification;
 
   static final PaymentPushNotificationService instance =
@@ -29,7 +23,6 @@ class PaymentPushNotificationService {
   static bool _localNotificationsInitialized = false;
   static int _nextNotificationId = 3000;
 
-  final ForegroundNotificationUpdater _foregroundNotificationUpdater;
   final UserNotificationPresenter _userNotificationPresenter;
 
   Future<void> requestPermissions() async {
@@ -49,23 +42,9 @@ class PaymentPushNotificationService {
 
   Future<void> showSavedPayment(PaymentIngestionResult result) async {
     final notification = _notificationFor(result);
-    await _foregroundNotificationUpdater(
-      title: notification.title,
-      body: notification.body,
-    );
     await _userNotificationPresenter(
       title: notification.title,
       body: notification.body,
-    );
-  }
-
-  static Future<void> _updateForegroundServiceNotification({
-    required String title,
-    required String body,
-  }) async {
-    await FlutterForegroundTask.updateService(
-      notificationTitle: title,
-      notificationText: body,
     );
   }
 

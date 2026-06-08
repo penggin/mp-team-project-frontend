@@ -32,6 +32,13 @@ void main() {
     ApiService.setHttpClientForTest(
       MockClient((request) async {
         expect(request.method, 'GET');
+        if (request.url.path == '/api/v1/budgets/monthly') {
+          return jsonResponse({
+            'success': true,
+            'data': {'is_configured': false},
+          }, 200);
+        }
+
         expect(request.url.path, '/api/v1/users/me');
         return jsonResponse({
           'success': true,
@@ -64,6 +71,13 @@ void main() {
     ApiService.setHttpClientForTest(
       MockClient((request) async {
         expect(request.method, 'GET');
+        if (request.url.path == '/api/v1/budgets/monthly') {
+          return jsonResponse({
+            'success': true,
+            'data': {'is_configured': false},
+          }, 200);
+        }
+
         expect(request.url.path, '/api/v1/users/me');
         return jsonResponse({
           'success': true,

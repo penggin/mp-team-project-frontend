@@ -2,13 +2,9 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
-import 'package:notification_listener_service/notification_event.dart';
-import 'package:notification_listener_service/notification_listener_service.dart';
 import '../services/api_service.dart';
 import '../services/category_mapper.dart';
 import '../services/experience_service.dart';
-import '../services/location_service.dart';
-import '../services/notification_processing.dart';
 import 'budget_alert_dialog.dart';
 import 'login_screen.dart';
 import 'main_screen.dart';
@@ -35,76 +31,37 @@ class NotificationScreen extends StatefulWidget {
 }
 
 class _NotificationScreenState extends State<NotificationScreen> {
-  // 백그라운드 서비스와 UI가 같은 알림을 중복 처리하지 않도록 방지
-  static final Set<String> _processedNotificationFingerprints = {};
-
   final Color themeSkyBlue = const Color(0xFFE8F6F8);
   final Color themeDarkBlue = const Color(0xFF1E105C);
 
   List<AppNotification> _notifications = [];
   bool _isLoading = true;
-  StreamSubscription<ServiceNotificationEvent>? _notificationSubscription;
+  final Set<String> _clearedNotificationKeys = <String>{};
+  Timer? _liveRefreshTimer;
 
   @override
   void initState() {
     super.initState();
     _loadFromBackend();
-    _listenNotificationsDirect();
+    _startLiveRefreshTimer();
     FlutterForegroundTask.addTaskDataCallback(_onReceiveTaskData);
   }
 
   @override
   void dispose() {
-    _notificationSubscription?.cancel();
+    _liveRefreshTimer?.cancel();
     FlutterForegroundTask.removeTaskDataCallback(_onReceiveTaskData);
     super.dispose();
   }
 
-  /// UI 레이어에서 직접 알림 스트림을 수신.
-  /// 백그라운드 서비스가 놓친 결제 알림을 보완하는 역할.
-  void _listenNotificationsDirect() {
-    _notificationSubscription?.cancel();
-    _notificationSubscription = NotificationListenerService.notificationsStream
-        .listen(
-          _handleNotificationEvent,
-          onError: (e) => debugPrint('알림 스트림 에러(직접): $e'),
-          onDone: () => debugPrint('알림 스트림 종료(직접)'),
-        );
+  void _startLiveRefreshTimer() {
+    debugPrint('[알림창] 라이브 새로고침 타이머 시작 (3초 주기)');
+    _liveRefreshTimer?.cancel();
+    _liveRefreshTimer = Timer.periodic(const Duration(seconds: 3), (_) {
+      debugPrint('[알림창] ⏱ 타이머 발화 → _loadFromBackend 호출');
+      _loadFromBackend(silent: true);
+    });
   }
-
-  Future<void> _handleNotificationEvent(ServiceNotificationEvent event) async {
-    final candidate = NotificationProcessing.candidateFromEvent(event);
-    if (candidate == null) return;
-
-    // 백그라운드 서비스 또는 이전 호출이 이미 처리한 알림은 건너뜀
-    if (_processedNotificationFingerprints.contains(candidate.fingerprint)) {
-      return;
-    }
-    _processedNotificationFingerprints.add(candidate.fingerprint);
-
-    debugPrint('알림 감지(직접): ${candidate.rawText}');
-
-    if (!await ApiService.hasValidToken()) return;
-
-    // GPS 좌표 조회 (카테고라이징 정밀도 향상용, 실패 시 null로 진행)
-    final coords = await LocationService.currentCoordinates();
-
-    final parsed = await ApiService.parseTransaction(
-      candidate.rawText,
-      x: coords.x,
-      y: coords.y,
-    );
-    if (parsed == null) return;
-
-    final saved = await ApiService.createLedgerEntry(parsed);
-    if (!saved || !mounted) return;
-
-    // 실제 결제 감지 후에만 다시 로드 (스피너 없이 조용히)
-    await _loadFromBackend(silent: true);
-  }
-
-  // 3초 타이머 제거: 실제 결제 감지 시에만 로드함
-  // void _startLiveRefreshTimer() { ... }
 
   void _onReceiveTaskData(dynamic data) {
     if (!mounted) return;
@@ -133,7 +90,9 @@ class _NotificationScreenState extends State<NotificationScreen> {
     print('[알림창] ✅ API 응답 — 항목 수: ${entries.length}');
     if (entries.isNotEmpty) {
       final first = entries.first;
-      print('[알림창] 최신 항목: ${first['merchant_name']} / ${first['amount']} / ${first['transaction_at'] ?? first['created_at']}');
+      print(
+        '[알림창] 최신 항목: ${first['merchant_name']} / ${first['amount']} / ${first['transaction_at'] ?? first['created_at']}',
+      );
     }
 
     if (!mounted) {
@@ -156,7 +115,13 @@ class _NotificationScreenState extends State<NotificationScreen> {
         if (bDate == null) return -1;
         return bDate.compareTo(aDate); // 최신순 (내림차순)
       });
-      _notifications = sorted.map(_notificationFromEntry).toList();
+      _notifications = sorted
+          .map(_notificationFromEntry)
+          .where(
+            (notification) =>
+                !_clearedNotificationKeys.contains(notification.key),
+          )
+          .toList();
       _isLoading = false;
       print('[알림창] 🎨 setState 완료 — 화면에 ${_notifications.length}개 표시');
     });
@@ -284,6 +249,9 @@ class _NotificationScreenState extends State<NotificationScreen> {
   }
 
   void _clearLocalNotifications() {
+    _clearedNotificationKeys.addAll(
+      _notifications.map((notification) => notification.key),
+    );
     setState(() {
       _notifications = [];
     });
@@ -338,8 +306,9 @@ class _NotificationScreenState extends State<NotificationScreen> {
                   ? themeDarkBlue.withValues(alpha: 0.35)
                   : themeDarkBlue,
             ),
-            onPressed:
-                _notifications.isEmpty ? null : _confirmClearNotifications,
+            onPressed: _notifications.isEmpty
+                ? null
+                : _confirmClearNotifications,
           ),
         ],
       ),

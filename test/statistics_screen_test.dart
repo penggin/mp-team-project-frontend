@@ -36,69 +36,71 @@ void main() {
         MockClient((request) async {
           requestedPaths.add(request.url.path);
 
-          if (request.url.path == '/api/v1/ledger/stats/monthly') {
+          if (request.url.path == '/api/v1/ledger') {
+            final items = request.url.queryParameters.containsKey('year')
+                ? [
+                    {
+                      'id': 'income-1',
+                      'amount': 1000000,
+                      'type': 'income',
+                      'category': 'salary',
+                      'merchant_name': '월급',
+                      'transaction_at': '2026-06-01T09:00:00+09:00',
+                    },
+                    {
+                      'id': 'expense-1',
+                      'amount': 200000,
+                      'type': 'expense',
+                      'category': 'food',
+                      'merchant_name': '식비',
+                      'transaction_at': '2026-06-02T09:00:00+09:00',
+                    },
+                    {
+                      'id': 'expense-2',
+                      'amount': 150000,
+                      'type': 'expense',
+                      'category': 'cafe',
+                      'merchant_name': '카페',
+                      'transaction_at': '2026-06-03T09:00:00+09:00',
+                    },
+                  ]
+                : [
+                    {
+                      'id': 'income-1',
+                      'amount': 1000000,
+                      'type': 'income',
+                      'category': 'salary',
+                      'merchant_name': '월급',
+                      'transaction_at': '2026-06-01T09:00:00+09:00',
+                    },
+                    {
+                      'id': 'expense-1',
+                      'amount': 200000,
+                      'type': 'expense',
+                      'category': 'food',
+                      'merchant_name': '식비',
+                      'transaction_at': '2026-06-02T09:00:00+09:00',
+                    },
+                    {
+                      'id': 'expense-2',
+                      'amount': 150000,
+                      'type': 'expense',
+                      'category': 'cafe',
+                      'merchant_name': '카페',
+                      'transaction_at': '2026-06-03T09:00:00+09:00',
+                    },
+                    {
+                      'id': 'expense-3',
+                      'amount': 420000,
+                      'type': 'expense',
+                      'category': 'food',
+                      'merchant_name': '지난달 식비',
+                      'transaction_at': '2026-05-02T09:00:00+09:00',
+                    },
+                  ];
             return jsonResponse({
               'success': true,
-              'data': {
-                'year': 2026,
-                'month': 5,
-                'entry_count': 3,
-                'total_income': 1000000,
-                'total_expense': 350000,
-                'total_transfer': 0,
-                'net_amount': 650000,
-                'category_totals': [
-                  {'category': 'food', 'amount': 200000},
-                  {'category': 'cafe', 'amount': 150000},
-                ],
-                'monthly_budget': 1000000,
-                'budget_remaining': 650000,
-                'is_over_budget': false,
-              },
-            }, 200);
-          }
-
-          if (request.url.path ==
-              '/api/v1/ledger/stats/categories/monthly/chart') {
-            return jsonResponse({
-              'success': true,
-              'data': {
-                'start_year': 2025,
-                'start_month': 12,
-                'end_year': 2026,
-                'end_month': 5,
-                'months': [
-                  {
-                    'year': 2026,
-                    'month': 4,
-                    'total_expense': 420000,
-                    'categories': [
-                      {
-                        'category': 'food',
-                        'amount': 280000,
-                        'percentage': 66.7,
-                      },
-                    ],
-                  },
-                  {
-                    'year': 2026,
-                    'month': 5,
-                    'total_expense': 350000,
-                    'categories': [
-                      {
-                        'category': 'food',
-                        'amount': 200000,
-                        'percentage': 57.1,
-                      },
-                      {
-                        'category': 'cafe',
-                        'amount': 150000,
-                        'percentage': 42.9,
-                      },
-                    ],
-                  },
-                ],
-              },
+              'data': {'items': items},
             }, 200);
           }
 
@@ -114,15 +116,10 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      expect(requestedPaths, contains('/api/v1/ledger/stats/monthly'));
-      expect(
-        requestedPaths,
-        contains('/api/v1/ledger/stats/categories/monthly/chart'),
-      );
+      expect(requestedPaths.every((path) => path == '/api/v1/ledger'), isTrue);
       expect(find.text('1,000,000 원'), findsOneWidget);
       expect(find.text('350,000 원'), findsWidgets);
       expect(find.text('최근 6개월 지출 추이'), findsOneWidget);
-      expect(find.text('예산 1,000,000 원'), findsOneWidget);
       expect(find.text('지출 350,000 원'), findsOneWidget);
     },
   );

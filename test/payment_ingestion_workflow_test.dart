@@ -100,6 +100,7 @@ void main() {
       'KB국민카드 스타벅스 5,600원 승인',
       source: PaymentIngestionSource.notification,
       receivedAt: receivedAt,
+      coordinateProvider: () async => (x: null, y: null),
     );
 
     expect(result.status, PaymentIngestionStatus.saved);
@@ -115,6 +116,65 @@ void main() {
       'x': 126.978,
       'y': 37.5665,
     });
+  });
+
+  test('includes GPS coordinates in the parser request when available', () async {
+    SharedPreferences.setMockInitialValues({'access_token': 'access-token'});
+
+    final receivedAt = DateTime(2026, 5, 27, 9, 30);
+
+    ApiService.setHttpClientForTest(
+      MockClient((request) async {
+        if (request.url.path == '/api/v1/parser/transaction') {
+          final parserPayload =
+              jsonDecode(request.body) as Map<String, dynamic>;
+          expect(parserPayload['x'], 126.978);
+          expect(parserPayload['y'], 37.5665);
+          return jsonResponse({
+            'success': true,
+            'data': {
+              'normalized_transaction': {
+                'transaction_type': 'expense',
+                'is_canceled': false,
+                'amount': 5600,
+                'merchant_name': '스타벅스',
+                'merchant_category': 'cafe',
+                'payment_method': 'card',
+                'card_company': 'KB국민카드',
+                'approved_at': '2026-05-27T09:29:00+09:00',
+                'source': 'notification',
+                'raw_text': 'KB국민카드 스타벅스 5,600원 승인',
+                'x': 126.978,
+                'y': 37.5665,
+              },
+              'confidence': 0.98,
+              'requires_user_confirmation': false,
+              'missing_fields': [],
+              'parse_strategy': 'rule_based',
+              'warnings': [],
+            },
+          }, 200);
+        }
+
+        if (request.url.path == '/api/v1/ledger') {
+          return jsonResponse({
+            'success': true,
+            'data': {'id': 'entry-1'},
+          }, 200);
+        }
+
+        fail('Unexpected backend call: ${request.method} ${request.url}');
+      }),
+    );
+
+    final result = await PaymentIngestionWorkflow.processText(
+      'KB국민카드 스타벅스 5,600원 승인',
+      source: PaymentIngestionSource.notification,
+      receivedAt: receivedAt,
+      coordinateProvider: () async => (x: 126.978, y: 37.5665),
+    );
+
+    expect(result.status, PaymentIngestionStatus.saved);
   });
 
   test('does not save canceled parsed transactions', () async {
@@ -158,6 +218,7 @@ void main() {
     final result = await PaymentIngestionWorkflow.processText(
       'KB국민카드 스타벅스 5,600원 취소',
       source: PaymentIngestionSource.notification,
+      coordinateProvider: () async => (x: null, y: null),
     );
 
     expect(result.status, PaymentIngestionStatus.skippedCancellation);

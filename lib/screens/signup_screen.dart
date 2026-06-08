@@ -62,6 +62,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
       // 첫 로그인 플래그 저장 → 로그인 후 캐릭터 선택창 표시
       final prefs = await SharedPreferences.getInstance();
       await prefs.setBool('is_first_login', true);
+      if (!mounted) return;
       _showSnackBar('회원가입 성공!');
       Navigator.pop(context);
     } else {

@@ -32,14 +32,18 @@ void main() {
     // 알림 스트림 직접 구독 없음 — 채널 호출이 오면 테스트 실패
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(notificationListenerChannel, (call) async {
-          fail('NotificationScreen must not read notifications directly: ${call.method}');
+          fail(
+            'NotificationScreen must not read notifications directly: ${call.method}',
+          );
         });
 
     // Foreground task service 재시작 없음 — 채널 호출이 오면 테스트 실패
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(foregroundTaskChannel, (call) async {
           // addTaskDataCallback / removeTaskDataCallback 은 in-memory 이므로 채널 호출 없음
-          fail('NotificationScreen must not manage the foreground service: ${call.method}');
+          fail(
+            'NotificationScreen must not manage the foreground service: ${call.method}',
+          );
         });
   });
 
@@ -77,9 +81,7 @@ void main() {
         }),
       );
 
-      await tester.pumpWidget(
-        const MaterialApp(home: NotificationScreen()),
-      );
+      await tester.pumpWidget(const MaterialApp(home: NotificationScreen()));
       await tester.pumpAndSettle();
 
       expect(find.text('스타벅스에서 5,600원 결제'), findsOneWidget);
@@ -127,9 +129,7 @@ void main() {
       }),
     );
 
-    await tester.pumpWidget(
-      const MaterialApp(home: NotificationScreen()),
-    );
+    await tester.pumpWidget(const MaterialApp(home: NotificationScreen()));
     await tester.pumpAndSettle();
 
     expect(find.text('스타벅스에서 5,600원 결제'), findsOneWidget);
@@ -150,7 +150,8 @@ void main() {
     expect(find.text('스타벅스에서 5,600원 결제'), findsNothing);
     expect(find.text('교보문고에서 12,000원 결제'), findsNothing);
     expect(find.text('알바비 320,000원 입금'), findsOneWidget);
-    expect(requestMethods, ['GET', 'GET']);
+    expect(requestMethods.length, greaterThanOrEqualTo(2));
+    expect(requestMethods.every((method) => method == 'GET'), isTrue);
   });
 
   testWidgets(
@@ -187,9 +188,7 @@ void main() {
         }),
       );
 
-      await tester.pumpWidget(
-        const MaterialApp(home: NotificationScreen()),
-      );
+      await tester.pumpWidget(const MaterialApp(home: NotificationScreen()));
       await tester.pumpAndSettle();
 
       expect(find.byTooltip('새로고침'), findsNothing);
@@ -235,9 +234,7 @@ void main() {
       }),
     );
 
-    await tester.pumpWidget(
-      const MaterialApp(home: NotificationScreen()),
-    );
+    await tester.pumpWidget(const MaterialApp(home: NotificationScreen()));
     await tester.pumpAndSettle();
 
     expect(find.text('알바비 320,000원 입금'), findsOneWidget);

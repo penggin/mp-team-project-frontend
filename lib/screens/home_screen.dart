@@ -1,4 +1,3 @@
-import 'dart:async';
 import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:video_player/video_player.dart';
@@ -46,20 +45,19 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
-  int _level = 1;
-  int _prevLevel = 1;
+  int? _level;
   double _expProgress = 0.0;
   int _todaySpend = 0;
   int _monthlyBudget = 0;
   int _monthlySpend = 0;
   int _totalExp = 0;
   bool _evolutionPending = false;
-  bool _usesBackendPetState = false;
+  bool _isLoadingPetState = true;
+  bool _isInteractingPet = false;
   bool _isDemoModeEnabled = false;
-  bool _isAddingDemoExp = false;
-  bool _isResettingDemoExp = false;
   String? _petName;
   String? _petSpecies;
+  String? _petLoadError;
   // mood: 'normal' | 'angry' 문자열 (백엔드 패치 후 int → String)
   String _petMood = 'normal';
   // health, cleanliness, coins는 팀 API에서 삭제됨
@@ -68,9 +66,6 @@ class _HomeScreenState extends State<HomeScreen> {
   int _dailyBaseBudget = 0;
   int _carryover = 0;
   bool _budgetAlertShown = false; // 같은 날 중복 표시 방지
-
-  Timer? _xpTimer;
-  bool _ticking = false;
 
   final List<String> _comments = [
     "저 너무 배가 불러요!!",
@@ -81,7 +76,7 @@ class _HomeScreenState extends State<HomeScreen> {
   ];
 
   String _currentComment = "캐릭터를 클릭하면 멘트가 나와요!";
-  late VideoPlayerController _videoController;
+  VideoPlayerController? _videoController;
 
   @override
   void initState() {
@@ -91,12 +86,7 @@ class _HomeScreenState extends State<HomeScreen> {
     ExperienceService.demoModeEnabled.addListener(_onDemoModeChanged);
     ExperienceService.monthlyBudgetNotifier.addListener(_onBudgetChanged);
     ExperienceService.loadDemoMode();
-    _loadAll().then((usesBackendPetState) {
-      if (mounted && !usesBackendPetState) _startXpTimer();
-    });
-    // _initVideoController는 _loadAll 내부에서 species 확인 후 호출하므로
-    // 여기선 기본값(dolphin)으로 먼저 초기화해 두고 _loadAll 완료 시 교체됨
-    _initVideoController(_level);
+    _loadAll();
   }
 
   Future<void> _checkAndShowBudgetAlert() async {
@@ -118,10 +108,9 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   void dispose() {
-    _xpTimer?.cancel();
     ExperienceService.demoModeEnabled.removeListener(_onDemoModeChanged);
     ExperienceService.monthlyBudgetNotifier.removeListener(_onBudgetChanged);
-    _videoController.dispose();
+    _videoController?.dispose();
     super.dispose();
   }
 
@@ -137,65 +126,28 @@ class _HomeScreenState extends State<HomeScreen> {
     _loadAll();
   }
 
-  // ── 실시간 XP 타이머 ──────────────────────────────────────────
-
-  void _startXpTimer() {
-    if (_usesBackendPetState) return;
-    _xpTimer?.cancel();
-    _xpTimer = Timer.periodic(const Duration(seconds: 1), (_) => _tickXp());
-  }
-
-  Future<void> _tickXp() async {
-    if (_usesBackendPetState) return;
-    if (_ticking || !mounted) return;
-    _ticking = true;
-    try {
-      await ExperienceService.addTimeBasedExp();
-      await ExperienceService.applyDailyPenalty(_todaySpend);
-      final totalExp = await ExperienceService.getTotalExp();
-      final monthlyBudget = await ExperienceService.getMonthlyBudget();
-      final newLevel = ExperienceService.levelFromExp(totalExp);
-
-      if (!mounted) return;
-
-      final shouldEvolve =
-          _crossedEvolution(_level, newLevel) && !_evolutionPending;
-
-      setState(() {
-        _prevLevel = _level;
-        _level = newLevel;
-        _totalExp = totalExp;
-        _expProgress = ExperienceService.expProgress(totalExp);
-        _monthlyBudget = monthlyBudget;
-        if (shouldEvolve) _evolutionPending = true;
-      });
-
-      if (shouldEvolve) {
-        _xpTimer?.cancel(); // 진화 중 타이머 일시 정지
-        WidgetsBinding.instance.addPostFrameCallback(
-          (_) => _triggerEvolution(),
-        );
-      }
-    } finally {
-      _ticking = false;
-    }
-  }
-
-  // ─────────────────────────────────────────────────────────────
-
   void _initVideoController(int level) {
-    _videoController = VideoPlayerController.asset(
-        characterAsset(level, species: _petSpecies))
-      ..initialize().then((_) {
-        if (!mounted) return;
-        setState(() {});
-        _videoController.setLooping(true);
-        _videoController.setVolume(0.0);
-        _videoController.play();
-      });
+    final controller = VideoPlayerController.asset(
+      characterAsset(level, species: _petSpecies),
+    );
+    _videoController = controller;
+    controller.initialize().then((_) {
+      if (!mounted || _videoController != controller) return;
+      setState(() {});
+      controller.setLooping(true);
+      controller.setVolume(0.0);
+      controller.play();
+    });
   }
 
-  Future<bool> _loadAll() async {
+  Future<void> _loadAll() async {
+    if (mounted) {
+      setState(() {
+        _isLoadingPetState = true;
+        _petLoadError = null;
+      });
+    }
+
     final now = DateTime.now();
 
     // 펫 상태 + 가계부 내역(이번 달) + 월간 예산을 병렬 호출
@@ -208,11 +160,6 @@ class _HomeScreenState extends State<HomeScreen> {
     final petState = results[0] as Map<String, dynamic>?;
     final entries = results[1] as List<Map<String, dynamic>>;
     final budgetData = results[2] as Map<String, dynamic>?;
-
-    final usesBackendPetState = petState != null;
-    if (!usesBackendPetState) {
-      await ExperienceService.addTimeBasedExp();
-    }
 
     int todaySpend = 0;
     int monthlySpend = 0;
@@ -234,9 +181,6 @@ class _HomeScreenState extends State<HomeScreen> {
     }
 
     await ExperienceService.recordTodaySpend(todaySpend);
-    if (!usesBackendPetState) {
-      await ExperienceService.applyDailyPenalty(todaySpend);
-    }
 
     // 월간 예산: 서버 API 응답의 monthly_limit 사용
     // is_configured == false 이거나 API 실패(null) 시 로컬 SharedPreferences 폴백
@@ -255,54 +199,64 @@ class _HomeScreenState extends State<HomeScreen> {
     final dailyBase = await ExperienceService.getDailyBaseBudget();
     final carryover = await ExperienceService.getCarryoverAmount();
 
-    final totalExp = usesBackendPetState
-        ? _intValue(petState['exp']) ?? 0
-        : await ExperienceService.getTotalExp();
-    final newLevel =
-        (usesBackendPetState ? _intValue(petState['level']) : null) ??
-        ExperienceService.levelFromExp(totalExp);
-    final persistedLevel = await ExperienceService.getLastLevel();
-
-    if (!mounted) return usesBackendPetState;
-
+    final newLevel = petState == null ? null : _validLevel(petState['level']);
+    final totalExp = petState == null
+        ? null
+        : max(0, _intValue(petState['exp']) ?? 0);
+    final previousLevel = _level;
     final shouldEvolve =
-        _crossedEvolution(persistedLevel, newLevel) && !_evolutionPending;
-    await ExperienceService.saveLastLevel(newLevel);
+        previousLevel != null &&
+        newLevel != null &&
+        _crossedEvolution(previousLevel, newLevel) &&
+        !_evolutionPending;
+
+    if (!mounted) return;
 
     // 펫 mood: 이제 'normal' | 'angry' 문자열 (숫자 아님)
     final moodRaw = petState?['mood']?.toString() ?? 'normal';
     final petMood = (moodRaw == 'angry') ? 'angry' : 'normal';
 
     setState(() {
-      _prevLevel = persistedLevel;
-      _level = newLevel;
-      _totalExp = totalExp;
-      _expProgress = ExperienceService.expProgress(totalExp);
       _todaySpend = todaySpend;
       _monthlyBudget = monthlyBudget;
       _monthlySpend = monthlySpend;
       _dailyBaseBudget = dailyBase;
       _carryover = carryover;
-      _usesBackendPetState = usesBackendPetState;
-      _petName = usesBackendPetState
-          ? _stringValue(petState['name'])
-          : _petName;
-      _petSpecies = usesBackendPetState
-          ? _stringValue(petState['species'])
-          : _petSpecies;
-      _petMood = usesBackendPetState ? petMood : _petMood;
+      _isLoadingPetState = false;
+
+      if (petState == null || newLevel == null) {
+        _petLoadError = '펫 상태를 불러오지 못했어요';
+        if (_level == null) {
+          _totalExp = 0;
+          _expProgress = 0.0;
+        }
+        return;
+      }
+
+      _petLoadError = null;
+      _level = newLevel;
+      _totalExp = totalExp ?? 0;
+      _expProgress = ExperienceService.expProgress(_totalExp);
+      _petName = _stringValue(petState['name']);
+      _petSpecies = _stringValue(petState['species']);
+      _petMood = petMood;
       if (shouldEvolve) _evolutionPending = true;
     });
 
-    if (usesBackendPetState) _xpTimer?.cancel();
     if (mounted) await _checkAndShowBudgetAlert();
 
+    if (newLevel == null) return;
     if (shouldEvolve) {
       WidgetsBinding.instance.addPostFrameCallback((_) => _triggerEvolution());
     } else {
       _refreshCharacterIfNeeded(newLevel);
     }
-    return usesBackendPetState;
+  }
+
+  int? _validLevel(Object? value) {
+    final level = _intValue(value);
+    if (level == null || level < 1) return null;
+    return level;
   }
 
   int? _intValue(Object? value) {
@@ -319,72 +273,81 @@ class _HomeScreenState extends State<HomeScreen> {
 
   void _refreshCharacterIfNeeded(int newLevel) {
     final needed = characterAsset(newLevel, species: _petSpecies);
-    if (_videoController.dataSource.contains(needed.split('/').last)) return;
-    _videoController.dispose();
+    final currentController = _videoController;
+    if (currentController != null &&
+        currentController.dataSource.contains(needed.split('/').last)) {
+      return;
+    }
+    currentController?.dispose();
     _initVideoController(newLevel);
   }
 
-  Future<void> _addDemoExperience() async {
-    if (_isAddingDemoExp || !_isDemoModeEnabled) return;
+  Future<void> _playWithPet() async {
+    if (_isInteractingPet || _level == null) return;
 
-    setState(() => _isAddingDemoExp = true);
+    setState(() => _isInteractingPet = true);
     try {
-      final nextTotalExp = _usesBackendPetState
-          ? (_totalExp + ExperienceService.xpPerLevel)
-          : await ExperienceService.addDemoExp();
-      final newLevel = ExperienceService.levelFromExp(nextTotalExp);
-      final shouldEvolve =
-          _crossedEvolution(_level, newLevel) && !_evolutionPending;
-
-      if (!mounted) return;
-      setState(() {
-        _prevLevel = _level;
-        _level = newLevel;
-        _totalExp = nextTotalExp;
-        _expProgress = ExperienceService.expProgress(nextTotalExp);
-        _currentComment = '데모 경험치가 추가됐어요!';
-        if (shouldEvolve) _evolutionPending = true;
-      });
-
-      if (shouldEvolve) {
-        _xpTimer?.cancel();
-        WidgetsBinding.instance.addPostFrameCallback(
-          (_) => _triggerEvolution(),
-        );
-      } else {
-        _refreshCharacterIfNeeded(newLevel);
-      }
+      await _interactWithPet('play', successComment: '같이 놀아서 기분이 좋아졌어요!');
     } finally {
-      if (mounted) setState(() => _isAddingDemoExp = false);
+      if (mounted) setState(() => _isInteractingPet = false);
     }
   }
 
-  Future<void> _resetDemoExperience() async {
-    if (_isResettingDemoExp || !_isDemoModeEnabled) return;
-
-    setState(() => _isResettingDemoExp = true);
-    try {
-      if (!_usesBackendPetState) {
-        await ExperienceService.resetExp();
-      }
-
-      if (!mounted) return;
+  Future<void> _interactWithPet(
+    String action, {
+    required String successComment,
+  }) async {
+    final petState = await ApiService.interactWithPet(action);
+    if (!mounted) return;
+    if (petState == null) {
       setState(() {
-        _prevLevel = _level;
-        _level = 1;
-        _totalExp = 0;
-        _expProgress = 0.0;
-        _evolutionPending = false;
-        _currentComment = '데모 경험치가 초기화됐어요!';
+        _petLoadError = '펫 상태를 갱신하지 못했어요';
       });
-      _refreshCharacterIfNeeded(1);
-    } finally {
-      if (mounted) setState(() => _isResettingDemoExp = false);
+      return;
+    }
+    _applyPetState(petState, successComment: successComment);
+  }
+
+  void _applyPetState(Map<String, dynamic> petState, {String? successComment}) {
+    final newLevel = _validLevel(petState['level']);
+    if (newLevel == null) {
+      setState(() {
+        _petLoadError = '펫 상태를 불러오지 못했어요';
+      });
+      return;
+    }
+
+    final previousLevel = _level;
+    final totalExp = max(0, _intValue(petState['exp']) ?? 0);
+    final shouldEvolve =
+        previousLevel != null &&
+        _crossedEvolution(previousLevel, newLevel) &&
+        !_evolutionPending;
+    final moodRaw = petState['mood']?.toString() ?? 'normal';
+
+    setState(() {
+      _petLoadError = null;
+      _isLoadingPetState = false;
+      _level = newLevel;
+      _totalExp = totalExp;
+      _expProgress = ExperienceService.expProgress(totalExp);
+      _petName = _stringValue(petState['name']);
+      _petSpecies = _stringValue(petState['species']);
+      _petMood = moodRaw == 'angry' ? 'angry' : 'normal';
+      if (successComment != null) _currentComment = successComment;
+      if (shouldEvolve) _evolutionPending = true;
+    });
+
+    if (shouldEvolve) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _triggerEvolution());
+    } else {
+      _refreshCharacterIfNeeded(newLevel);
     }
   }
 
   void _triggerEvolution() {
-    if (!mounted) return;
+    final level = _level;
+    if (!mounted || level == null) return;
     Navigator.of(context).push(
       PageRouteBuilder(
         opaque: false,
@@ -394,15 +357,14 @@ class _HomeScreenState extends State<HomeScreen> {
           return FadeTransition(
             opacity: animation,
             child: EvolutionScreen(
-              newCharacterAsset: characterAsset(_level, species: _petSpecies),
-              newLevel: _level,
+              newCharacterAsset: characterAsset(level, species: _petSpecies),
+              newLevel: level,
               species: _petSpecies,
               onComplete: () {
                 if (!mounted) return;
                 setState(() => _evolutionPending = false);
-                _videoController.dispose();
-                _initVideoController(_level);
-                _startXpTimer(); // 진화 완료 후 타이머 재시작
+                _videoController?.dispose();
+                _initVideoController(level);
               },
             ),
           );
@@ -429,27 +391,12 @@ class _HomeScreenState extends State<HomeScreen> {
       _currentComment = _comments[random.nextInt(_comments.length)];
     });
 
-    // 캐릭터 탭마다 5 XP 지급
-    await ExperienceService.addExp(5);
-    final totalExp = await ExperienceService.getTotalExp();
-    final newLevel = ExperienceService.levelFromExp(totalExp);
-    if (!mounted) return;
-
-    final shouldEvolve = _crossedEvolution(_level, newLevel) && !_evolutionPending;
-    setState(() {
-      _prevLevel = _level;
-      _level = newLevel;
-      _totalExp = totalExp;
-      _expProgress = ExperienceService.expProgress(totalExp);
-      if (shouldEvolve) _evolutionPending = true;
-    });
-
-    if (shouldEvolve) {
-      await ExperienceService.saveLastLevel(newLevel);
-      _xpTimer?.cancel();
-      WidgetsBinding.instance.addPostFrameCallback((_) => _triggerEvolution());
-    } else {
-      _refreshCharacterIfNeeded(newLevel);
+    if (_level == null || _isInteractingPet) return;
+    setState(() => _isInteractingPet = true);
+    try {
+      await _interactWithPet('pet', successComment: _currentComment);
+    } finally {
+      if (mounted) setState(() => _isInteractingPet = false);
     }
   }
 
@@ -515,15 +462,21 @@ class _HomeScreenState extends State<HomeScreen> {
     final int? remainingBudget = _monthlyBudget > 0
         ? _monthlyBudget - _monthlySpend
         : null;
-    final petTitle = _petName ?? _characterLabel(_level);
+    final level = _level;
+    final hasPetState = level != null;
+    final characterLabel = level == null ? null : _characterLabel(level);
+    final petTitle = _petName ?? characterLabel ?? '펫 상태 확인 중';
     final speciesLabel = _petSpecies == null
         ? null
         : _petSpeciesLabel(_petSpecies!);
-    final petSubtitle = _petSpecies == null
-        ? _characterLabel(_level)
+    final petSubtitle = !hasPetState
+        ? null
+        : _petSpecies == null
+        ? characterLabel
         : speciesLabel == null
         ? null
-        : '${_characterLabel(_level)} · $speciesLabel';
+        : '$characterLabel · $speciesLabel';
+    final videoController = _videoController;
 
     return Scaffold(
       backgroundColor: colors.background,
@@ -579,7 +532,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     Row(
                       children: [
                         Text(
-                          'LV : $_level',
+                          hasPetState ? 'LV : $level' : 'LV : --',
                           style: TextStyle(
                             fontSize: 16,
                             fontWeight: FontWeight.bold,
@@ -637,12 +590,10 @@ class _HomeScreenState extends State<HomeScreen> {
                           runSpacing: 8,
                           children: [
                             OutlinedButton.icon(
-                              onPressed: _isResettingDemoExp
-                                  ? null
-                                  : _resetDemoExperience,
-                              icon: const Icon(Icons.restart_alt, size: 18),
+                              onPressed: _isLoadingPetState ? null : _loadAll,
+                              icon: const Icon(Icons.sync, size: 18),
                               label: Text(
-                                _isResettingDemoExp ? '초기화 중...' : 'EXP 초기화',
+                                _isLoadingPetState ? '동기화 중...' : '상태 동기화',
                               ),
                               style: OutlinedButton.styleFrom(
                                 foregroundColor: colors.primaryText,
@@ -654,12 +605,12 @@ class _HomeScreenState extends State<HomeScreen> {
                               ),
                             ),
                             FilledButton.icon(
-                              onPressed: _isAddingDemoExp
+                              onPressed: _isInteractingPet || !hasPetState
                                   ? null
-                                  : _addDemoExperience,
-                              icon: const Icon(Icons.bolt, size: 18),
+                                  : _playWithPet,
+                              icon: const Icon(Icons.favorite, size: 18),
                               label: Text(
-                                _isAddingDemoExp ? '추가 중...' : 'EXP +100',
+                                _isInteractingPet ? '반영 중...' : '놀아주기',
                               ),
                               style: FilledButton.styleFrom(
                                 backgroundColor: colors.primaryText,
@@ -675,13 +626,18 @@ class _HomeScreenState extends State<HomeScreen> {
                       ),
                     ],
                     const SizedBox(height: 20),
-                    if (_usesBackendPetState) ...[
+                    if (_petLoadError != null) ...[
+                      Text(
+                        _petLoadError!,
+                        style: TextStyle(fontSize: 12, color: colors.subText),
+                      ),
+                      const SizedBox(height: 12),
+                    ],
+                    if (hasPetState) ...[
                       Wrap(
                         spacing: 8,
                         runSpacing: 8,
-                        children: [
-                          _buildPetMoodChip(_petMood, colors),
-                        ],
+                        children: [_buildPetMoodChip(_petMood, colors)],
                       ),
                       const SizedBox(height: 20),
                     ],
@@ -725,7 +681,7 @@ class _HomeScreenState extends State<HomeScreen> {
                               style: TextStyle(
                                 fontSize: 16,
                                 fontWeight: FontWeight.bold,
-                                 color:
+                                color:
                                     remainingBudget != null &&
                                         remainingBudget < 0
                                     ? Colors.red
@@ -755,13 +711,21 @@ class _HomeScreenState extends State<HomeScreen> {
                     child: ClipRRect(
                       borderRadius: BorderRadius.circular(20),
                       child: Center(
-                        child: _videoController.value.isInitialized
+                        child:
+                            videoController != null &&
+                                videoController.value.isInitialized
                             ? AspectRatio(
-                                aspectRatio: _videoController.value.aspectRatio,
-                                child: VideoPlayer(_videoController),
+                                aspectRatio: videoController.value.aspectRatio,
+                                child: VideoPlayer(videoController),
                               )
-                            : CircularProgressIndicator(
+                            : _isLoadingPetState
+                            ? CircularProgressIndicator(
                                 color: colors.primaryText,
+                              )
+                            : Icon(
+                                Icons.pets,
+                                color: colors.primaryText,
+                                size: 48,
                               ),
                       ),
                     ),
@@ -836,9 +800,7 @@ class _HomeScreenState extends State<HomeScreen> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       decoration: BoxDecoration(
-        color: isAngry
-            ? Colors.red.withValues(alpha: 0.12)
-            : colors.background,
+        color: isAngry ? Colors.red.withValues(alpha: 0.12) : colors.background,
         borderRadius: BorderRadius.circular(12),
       ),
       child: Row(
@@ -859,24 +821,6 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
           ),
         ],
-      ),
-    );
-  }
-
-  Widget _buildPetStatusChip(String label, int? value, ThemeColors colors) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-      decoration: BoxDecoration(
-        color: colors.background,
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Text(
-        '$label ${value ?? '-'}',
-        style: TextStyle(
-          color: colors.primaryText,
-          fontSize: 12,
-          fontWeight: FontWeight.w600,
-        ),
       ),
     );
   }

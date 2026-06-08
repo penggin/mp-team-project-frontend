@@ -1,5 +1,8 @@
 import 'api_service.dart';
+import 'location_service.dart';
 import 'notification_processing.dart';
+
+typedef PaymentCoordinateProvider = Future<({double? x, double? y})> Function();
 
 enum PaymentIngestionSource { notification, sms }
 
@@ -43,6 +46,7 @@ class PaymentIngestionWorkflow {
     DateTime? receivedAt,
     double? x,
     double? y,
+    PaymentCoordinateProvider? coordinateProvider,
   }) {
     return processText(
       candidate.rawText,
@@ -50,6 +54,7 @@ class PaymentIngestionWorkflow {
       receivedAt: receivedAt,
       x: x,
       y: y,
+      coordinateProvider: coordinateProvider,
     );
   }
 
@@ -59,6 +64,7 @@ class PaymentIngestionWorkflow {
     DateTime? receivedAt,
     double? x,
     double? y,
+    PaymentCoordinateProvider? coordinateProvider,
   }) async {
     final rawText = NotificationProcessing.normalizeText(text);
     if (!NotificationProcessing.isPaymentText(rawText)) {
@@ -68,12 +74,18 @@ class PaymentIngestionWorkflow {
       );
     }
 
+    final coordinates = await _coordinatesForParser(
+      x: x,
+      y: y,
+      coordinateProvider: coordinateProvider,
+    );
+
     final parsed = await ApiService.parseTransaction(
       rawText,
       source: source.apiValue,
       receivedAt: receivedAt,
-      x: x,
-      y: y,
+      x: coordinates.x,
+      y: coordinates.y,
     );
     if (parsed == null) {
       return PaymentIngestionResult(
@@ -129,5 +141,21 @@ class PaymentIngestionWorkflow {
     }
 
     return null;
+  }
+
+  static Future<({double? x, double? y})> _coordinatesForParser({
+    double? x,
+    double? y,
+    PaymentCoordinateProvider? coordinateProvider,
+  }) async {
+    if (x != null && y != null) return (x: x, y: y);
+
+    final provider = coordinateProvider ?? LocationService.currentCoordinates;
+    try {
+      final current = await provider();
+      return (x: x ?? current.x, y: y ?? current.y);
+    } catch (_) {
+      return (x: x, y: y);
+    }
   }
 }
