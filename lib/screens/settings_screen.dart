@@ -5,6 +5,7 @@ import '../app_colors.dart';
 import '../services/experience_service.dart';
 import '../services/api_service.dart';
 import 'login_screen.dart';
+import 'character_select_screen.dart';
 
 // --- 설정 화면 위젯 ---
 class SettingsScreen extends StatefulWidget {
@@ -30,10 +31,27 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Future<void> _loadBudget() async {
-    final budget = await ExperienceService.getMonthlyBudget();
-    if (mounted) setState(() => _monthlyBudget = budget);
-  }
+    // 서버 API에서 월간 예산 조회
+    final now = DateTime.now();
+    final budgetData = await ApiService.getMonthlyBudget(
+      year: now.year,
+      month: now.month,
+    );
+    final configured = budgetData?['is_configured'] as bool? ?? false;
+    final serverBudget = configured
+        ? ((budgetData?['monthly_limit'] as num?)?.toInt() ?? 0)
+        : 0;
 
+    if (serverBudget > 0) {
+      // 서버 값을 로컈에도 동기
+      await ExperienceService.setMonthlyBudget(serverBudget);
+      if (mounted) setState(() => _monthlyBudget = serverBudget);
+    } else {
+      // 서버 미설정 시 로컈 폴백
+      final localBudget = await ExperienceService.getMonthlyBudget();
+      if (mounted) setState(() => _monthlyBudget = localBudget);
+    }
+  }
   Future<void> _loadUserProfile() async {
     final profile = await ApiService.getCurrentUser();
     if (!mounted) return;
@@ -103,8 +121,30 @@ class _SettingsScreenState extends State<SettingsScreen> {
           TextButton(
             onPressed: () async {
               final value = int.tryParse(controller.text) ?? 0;
-              await ExperienceService.setMonthlyBudget(value);
-              if (mounted) setState(() => _monthlyBudget = value);
+              if (value > 0) {
+                // 서버 API에 저장
+                final now = DateTime.now();
+                final result = await ApiService.setMonthlyBudget(
+                  year: now.year,
+                  month: now.month,
+                  monthlyLimit: value,
+                );
+                // 로컬 SharedPreferences에도 동기 (홈 타이머가 로컈 값 사용)
+                await ExperienceService.setMonthlyBudget(value);
+                if (mounted) {
+                  setState(() => _monthlyBudget = value);
+                  if (result == null && ctx.mounted) {
+                    ScaffoldMessenger.of(ctx).showSnackBar(
+                      const SnackBar(
+                        content: Text('서버 저장에 실패했습니다. 로컈에만 저장되었습니다.'),
+                      ),
+                    );
+                  }
+                }
+              } else {
+                await ExperienceService.setMonthlyBudget(0);
+                if (mounted) setState(() => _monthlyBudget = 0);
+              }
               if (ctx.mounted) Navigator.pop(ctx);
             },
             child: Text(
@@ -118,6 +158,68 @@ class _SettingsScreenState extends State<SettingsScreen> {
           TextButton(
             onPressed: () => Navigator.pop(ctx),
             child: Text('취소', style: TextStyle(color: colors.subText)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showCharacterChangeDialog(ThemeColors colors) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: colors.background,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+        title: Text(
+          '캐릭터 변경 및 초기화',
+          textAlign: TextAlign.center,
+          style: TextStyle(
+            fontSize: 16,
+            fontWeight: FontWeight.bold,
+            color: colors.primaryText,
+          ),
+        ),
+        content: Text(
+          '다른 캐릭터로 변경하면 현재 캐릭터의 레벨이 초기화됩니다.\n변경하시겠습니까?',
+          textAlign: TextAlign.center,
+          style: TextStyle(fontSize: 14, color: colors.subText, height: 1.5),
+        ),
+        actionsAlignment: MainAxisAlignment.spaceEvenly,
+        actions: [
+          TextButton(
+            onPressed: () async {
+              Navigator.pop(ctx);
+              // XP 초기화
+              await ExperienceService.resetExp();
+              await ExperienceService.saveLastLevel(1);
+              if (!mounted) return;
+              // 캐릭터 선택창으로 이동
+              Navigator.pushReplacement(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => const CharacterSelectScreen(),
+                ),
+              );
+            },
+            child: Text(
+              'Yes',
+              style: TextStyle(
+                color: colors.primaryText,
+                fontWeight: FontWeight.bold,
+                fontSize: 15,
+              ),
+            ),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: Text(
+              'No',
+              style: TextStyle(
+                color: colors.subText,
+                fontWeight: FontWeight.bold,
+                fontSize: 15,
+              ),
+            ),
           ),
         ],
       ),
@@ -382,6 +484,30 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       size: 18,
                     ),
                   ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 25),
+
+            // 3-1. 캐릭터 변경 및 초기화
+            Container(
+              decoration: BoxDecoration(
+                border: Border.all(color: colors.cardBackground, width: 2),
+                borderRadius: BorderRadius.circular(15),
+              ),
+              child: ListTile(
+                onTap: () => _showCharacterChangeDialog(colors),
+                title: Text(
+                  '캐릭터 변경 및 초기화',
+                  style: TextStyle(
+                    color: colors.primaryText,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                trailing: Icon(
+                  Icons.arrow_forward_ios,
+                  color: colors.primaryText,
+                  size: 18,
                 ),
               ),
             ),

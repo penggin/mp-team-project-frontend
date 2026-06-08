@@ -4,7 +4,6 @@ import 'notification_screen.dart';
 import 'package:first/app_colors.dart';
 import 'package:first/services/api_service.dart';
 import 'package:first/services/category_mapper.dart';
-import 'package:first/services/experience_service.dart';
 import 'main_screen.dart';
 
 class LedgerScreen extends StatefulWidget {
@@ -25,6 +24,8 @@ class _LedgerScreenState extends State<LedgerScreen> {
   final Map<String, GlobalKey> _dateKeys = {};
   // 각 거래 아이템별 key (index → key)
   final Map<int, GlobalKey> _itemKeys = {};
+  // 달력 API 응답의 days[] 데이터 (day → {income, expense, is_over_budget_risk_day})
+  final Map<int, Map<String, dynamic>> _calendarDays = {};
 
   // 날짜 선택 시 보여줄 필터된 리스트 (null이면 전체 표시)
   List<Map<String, dynamic>> get _displayTransactions {
@@ -42,8 +43,11 @@ class _LedgerScreenState extends State<LedgerScreen> {
   int currentYear = DateTime.now().year;
   int currentMonth = DateTime.now().month;
 
-  // ✅ 소비 페이스 기반 예상 예산 초과일 (이번 달이고 데이터 충분할 때만 세팅)
-  int? _projectedExceedDay;
+  // 달력 API 메타 정보 (예산 초과 위험 구간 판단용)
+  int? _overBudgetStartDay;
+  double _dailyAvgExpense = 0;
+  bool _budgetConfigured = false;
+  bool _isCurrentMonth = false;
 
   @override
   void initState() {
@@ -51,7 +55,7 @@ class _LedgerScreenState extends State<LedgerScreen> {
     _fetchLedgerData();
   }
 
-  // ✅ 백엔드에서 가계부 데이터 가져오기
+  // ─── 달력 API + 가계부 목록 API 병렬 호출 ────────────────────────
   Future<void> _fetchLedgerData() async {
     setState(() {
       isLoading = true;
@@ -59,11 +63,71 @@ class _LedgerScreenState extends State<LedgerScreen> {
     });
 
     try {
-      final entries = await ApiService.getLedgerEntries();
+      // 달력 데이터(날짜별 합계 + 예산 초과 위험일)와
+      // 가계부 목록(상세 리스트)을 병렬 호출
+      final results = await Future.wait([
+        ApiService.getLedgerCalendar(
+          year: currentYear,
+          month: currentMonth,
+        ),
+        ApiService.getLedgerEntries(
+          year: currentYear,
+          month: currentMonth,
+        ),
+      ]);
 
-      // ✅ API 응답 → 화면용 데이터로 변환
+      final calendarData = results[0] as Map<String, dynamic>?;
+      final entries = results[1] as List<Map<String, dynamic>>;
+
+      // ── 달력 days[] → _calendarDays 맵으로 변환 ─────────────────
+      final newCalendarDays = <int, Map<String, dynamic>>{};
+      if (calendarData != null) {
+        final daysList = calendarData['days'];
+        if (daysList is List) {
+          for (final d in daysList) {
+            if (d is Map) {
+              final day = d['day'] as int?;
+              if (day != null) {
+                newCalendarDays[day] = Map<String, dynamic>.from(d);
+              }
+            }
+          }
+        }
+      }
+
+      // 달력 API가 실패하거나 days[]가 비어있으면
+      // 가계부 목록(entries)로부터 날짜별 지출/수입을 직접 집계하여 폴백
+      if (newCalendarDays.isEmpty && entries.isNotEmpty) {
+        debugPrint('[Ledger] 달력 API 응답 비었음 — 가계부 목록으로 폴백 집계');
+        for (final entry in entries) {
+          final txAtStr = (entry['transaction_at'] ?? entry['created_at'] ?? '') as String;
+          if (txAtStr.isEmpty) continue;
+          try {
+            final txDate = DateTime.parse(txAtStr).toLocal();
+            if (txDate.year != currentYear || txDate.month != currentMonth) continue;
+            final day = txDate.day;
+            final amount = (entry['amount'] as num?)?.toInt() ?? 0;
+            final type   = entry['type']?.toString() ?? '';
+            final cur    = newCalendarDays.putIfAbsent(day, () => {
+              'day': day,
+              'income': 0,
+              'expense': 0,
+              'transfer': 0,
+              'is_over_budget_risk_day': false,
+            });
+            if (type == 'income') {
+              cur['income'] = ((cur['income'] as int?) ?? 0) + amount;
+            } else if (type == 'expense') {
+              cur['expense'] = ((cur['expense'] as int?) ?? 0) + amount;
+            } else if (type == 'transfer') {
+              cur['transfer'] = ((cur['transfer'] as int?) ?? 0) + amount;
+            }
+          } catch (_) {}
+        }
+      }
+
+      // ── 가계부 목록 → 화면용 데이터 변환 ───────────────────────────
       final converted = entries.map((entry) {
-        // toLocal()로 타임존 변환
         final DateTime txDateRaw = DateTime.parse(
           entry['transaction_at'] ??
               entry['created_at'] ??
@@ -87,44 +151,75 @@ class _LedgerScreenState extends State<LedgerScreen> {
           'isIncome': isIncome,
           'icon': _iconFromCategory(category),
         };
-      }).toList();
+      }).toList()
+        ..sort(
+          (a, b) =>
+              (b['fullDate'] as DateTime).compareTo(a['fullDate'] as DateTime),
+        );
 
-      // ✅ 현재 월 데이터만 필터링 (toLocal 변환 후 비교)
-      final filtered = converted.where((tx) {
-        final date = tx['fullDate'] as DateTime;
-        return date.year == currentYear && date.month == currentMonth;
-      }).toList();
-
-      // ✅ 날짜 내림차순 정렬
-      filtered.sort(
-        (a, b) =>
-            (b['fullDate'] as DateTime).compareTo(a['fullDate'] as DateTime),
-      );
-
-      // ✅ 날짜별 첫 번째 아이템 GlobalKey & 아이템별 GlobalKey 생성
+      // ── GlobalKey 생성 ───────────────────────────────────────────
       final newDateKeys = <String, GlobalKey>{};
       final newItemKeys = <int, GlobalKey>{};
-      for (int i = 0; i < filtered.length; i++) {
-        final dateStr = filtered[i]['date'] as String;
+      for (int i = 0; i < converted.length; i++) {
+        final dateStr = converted[i]['date'] as String;
         newItemKeys[i] = GlobalKey();
         if (!newDateKeys.containsKey(dateStr)) {
           newDateKeys[dateStr] = newItemKeys[i]!;
         }
       }
 
+      // ── 예상 초과일 & 메타 정보 ──────────────────────────────────
+      final overBudgetStartDay = calendarData?['over_budget_start_day'] as int?;
+      final budgetConfigured   = calendarData?['budget_configured'] as bool? ?? false;
+      final isCurrentMonth     = calendarData?['is_current_month'] as bool? ?? false;
+
+      // daily_average_expense: 이번 달에만 서버가 채워줌.
+      // 지난 달은 0으로 내려오므로 calendarDays의 expense 합계로 직접 계산.
+      double dailyAvgExpense =
+          (calendarData?['daily_average_expense'] as num?)?.toDouble() ?? 0.0;
+      if (dailyAvgExpense <= 0 && newCalendarDays.isNotEmpty) {
+        // 지출이 있는 날만 카운트해서 평균 계산
+        int totalExpense = 0;
+        int daysWithExpense = 0;
+        for (final d in newCalendarDays.values) {
+          final exp = (d['expense'] as num?)?.toInt() ?? 0;
+          if (exp > 0) {
+            totalExpense += exp;
+            daysWithExpense++;
+          }
+        }
+        if (daysWithExpense > 0) {
+          dailyAvgExpense = totalExpense / daysWithExpense;
+        }
+      }
+      // 디버그 로그
+      debugPrint('[Ledger] isCurrentMonth=$isCurrentMonth budgetConfigured=$budgetConfigured');
+      debugPrint('[Ledger] dailyAvgExpense=$dailyAvgExpense overBudgetStartDay=$overBudgetStartDay');
+      debugPrint('[Ledger] calendarDays 수: ${newCalendarDays.length}');
+      if (newCalendarDays.isNotEmpty) {
+        final sample = newCalendarDays.entries.first;
+        debugPrint('[Ledger] 샘플 날짜[${sample.key}]: ${sample.value}');
+      }
+
       setState(() {
-        transactions = filtered;
+        transactions = converted;
+        _calendarDays
+          ..clear()
+          ..addAll(newCalendarDays);
         _dateKeys
           ..clear()
           ..addAll(newDateKeys);
         _itemKeys
           ..clear()
           ..addAll(newItemKeys);
+        // isCurrentMonth 조건 없이 서버 값 그대로 사용
+        // (지난 달은 서버가 is_over_budget_risk_day=false로 내려보내므로 안전)
+        _overBudgetStartDay = budgetConfigured ? overBudgetStartDay : null;
+        _dailyAvgExpense    = dailyAvgExpense;
+        _budgetConfigured   = budgetConfigured;
+        _isCurrentMonth     = isCurrentMonth;
         isLoading = false;
       });
-
-      // ✅ 소비 페이스 기반 예상 초과일 계산
-      await _computeProjectedExceedDay();
     } catch (e) {
       setState(() {
         errorMessage = '데이터를 불러오지 못했습니다.\n$e';
@@ -167,28 +262,22 @@ class _LedgerScreenState extends State<LedgerScreen> {
     }
   }
 
-  // ✅ 달력에서 해당 날짜의 수입/지출 합계 계산
-  Map<String, int> _getDaySummary(int day) {
-    final dateStr = '$currentMonth.$day';
-    int income = 0;
-    int expense = 0;
+  // 달력 날짜 셀 스타일 판단 헬퍼 메서드
 
-    for (var tx in transactions) {
-      if (tx['date'] == dateStr) {
-        final amountStr = (tx['amount'] as String).replaceAll(
-          RegExp(r'[^0-9]'),
-          '',
-        );
-        final amount = int.tryParse(amountStr) ?? 0;
-        if (tx['isIncome'] == true) {
-          income += amount;
-        } else {
-          expense += amount;
-        }
-      }
-    }
-    return {'income': income, 'expense': expense};
+  /// 실제 결제 이력이 있는 날짜인지 (내역 리스트 기준)
+  bool _hasTransaction(int day) =>
+      _dateKeys.containsKey('$currentMonth.$day');
+
+  /// 해당 날 지출에서 일 평균의 1.5배를 넘으면 과소비일로 판단
+  bool _isOverspentDay(int day) {
+    if (_dailyAvgExpense <= 0) return false;
+    final expense = (_calendarDays[day]?['expense'] as num?)?.toDouble() ?? 0;
+    return expense > _dailyAvgExpense * 1.5;
   }
+
+  /// is_over_budget_risk_day: 서버가 표시한 예산 초과 위험 구간
+  bool _isRiskDay(int day) =>
+      _calendarDays[day]?['is_over_budget_risk_day'] as bool? ?? false;
 
   // ✅ 월 이동 함수
   void _changeMonth(int delta) {
@@ -236,70 +325,37 @@ class _LedgerScreenState extends State<LedgerScreen> {
     return DateTime(year, month + 1, 0).day;
   }
 
-  /// 소비 페이스 기반 예상 예산 초과일 계산.
-  /// 조건: 현재 달 + 월 예산 > 0 + 누적 지출 >= 월 예산의 1/10
-  /// 결과: 그 날부터 월 마지막 날까지 달력에서 빨갛게 표시. 안전하면 null.
-  Future<void> _computeProjectedExceedDay() async {
-    final now = DateTime.now();
-
-    // 과거/미래 달은 페이스 표시 안 함
-    if (currentYear != now.year || currentMonth != now.month) {
-      if (mounted) setState(() => _projectedExceedDay = null);
-      return;
-    }
-
-    final monthlyBudget = await ExperienceService.getMonthlyBudget();
-    if (monthlyBudget <= 0) {
-      if (mounted) setState(() => _projectedExceedDay = null);
-      return;
-    }
-
-    // 오늘까지 누적 지출 계산 (미래 거래는 제외)
-    int cumSpend = 0;
-    for (final tx in transactions) {
-      if (tx['isIncome'] == true) continue;
-      final txDate = tx['fullDate'] as DateTime;
-      if (txDate.day > now.day) continue;
-      final amountStr = (tx['amount'] as String).replaceAll(
-        RegExp(r'[^0-9]'),
-        '',
-      );
-      cumSpend += int.tryParse(amountStr) ?? 0;
-    }
-
-    // 데이터 부족 (월 예산의 1/10 미만 사용)
-    if (cumSpend * 10 < monthlyBudget) {
-      if (mounted) setState(() => _projectedExceedDay = null);
-      return;
-    }
-
-    final totalDays = _daysInMonth(currentYear, currentMonth);
-    final today = now.day;
-
-    // 이미 초과한 경우: 오늘부터 빨강
-    if (cumSpend >= monthlyBudget) {
-      if (mounted) setState(() => _projectedExceedDay = today);
-      return;
-    }
-
-    // 일평균 지출 기반 예상 초과일
-    final dailyAverage = cumSpend / today;
-    if (dailyAverage <= 0) {
-      if (mounted) setState(() => _projectedExceedDay = null);
-      return;
-    }
-
-    final remaining = monthlyBudget - cumSpend;
-    final daysUntilExceed = (remaining / dailyAverage).floor();
-    final projectedDay = today + daysUntilExceed + 1; // 초과가 발생하는 첫 날
-
-    // 이번 달 안에 초과 안 함 → 안전
-    if (projectedDay > totalDays) {
-      if (mounted) setState(() => _projectedExceedDay = null);
-      return;
-    }
-
-    if (mounted) setState(() => _projectedExceedDay = projectedDay);
+  // ── 달력 범례 칩 ────────────────────────────────────────────────
+  Widget _buildLegend({
+    required Color color,
+    required String label,
+    bool isBorder = false,
+  }) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          width: 12,
+          height: 12,
+          decoration: BoxDecoration(
+            color: color.withValues(alpha: 0.18),
+            shape: BoxShape.circle,
+            border: isBorder
+                ? Border.all(color: color.withValues(alpha: 0.6), width: 1.2)
+                : null,
+          ),
+        ),
+        const SizedBox(width: 4),
+        Text(
+          label,
+          style: TextStyle(
+            fontSize: 10,
+            color: color,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+      ],
+    );
   }
 
   @override
@@ -388,114 +444,171 @@ class _LedgerScreenState extends State<LedgerScreen> {
                     ),
                   ],
                 ),
-                if (_projectedExceedDay != null) ...[
+                if (_overBudgetStartDay != null) ...[
                   const SizedBox(height: 8),
-                  Row(
-                    children: [
-                      Icon(
-                        Icons.warning_amber_rounded,
-                        size: 16,
-                        color: expenseColor,
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 7,
+                    ),
+                    decoration: BoxDecoration(
+                      color: Colors.orange.withValues(alpha: 0.10),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(
+                        color: Colors.orange.withValues(alpha: 0.35),
                       ),
-                      const SizedBox(width: 4),
-                      Expanded(
-                        child: Text(
-                          '현재 소비 페이스로는 $_projectedExceedDay일경 예산을 초과할 것 같아요',
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: expenseColor,
-                            fontWeight: FontWeight.w600,
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(
+                          Icons.warning_amber_rounded,
+                          size: 15,
+                          color: Colors.orange.shade800,
+                        ),
+                        const SizedBox(width: 6),
+                        Expanded(
+                          child: Text(
+                            '$_overBudgetStartDay일부터 예산 초과 예상 구간입니다',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: Colors.orange.shade800,
+                              fontWeight: FontWeight.w600,
+                            ),
                           ),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
                 ],
+                // 범례 행
+                const SizedBox(height: 8),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    _buildLegend(
+                      color: expenseColor,
+                      label: '과소비일',
+                      isBorder: true,
+                    ),
+                    const SizedBox(width: 10),
+                    // 예산 초과 위험구간 범례는 현재달 + 예산 설정시만 표시
+                    if (_budgetConfigured && _isCurrentMonth)
+                      _buildLegend(
+                        color: Colors.orange.shade700,
+                        label: '초과예상구간',
+                      ),
+                  ],
+                ),
                 const SizedBox(height: 20),
 
-                // ✅ 달력 그리드 (실제 날짜 수 기반)
+                // 달력 그리드
                 GridView.builder(
                   shrinkWrap: true,
                   physics: const NeverScrollableScrollPhysics(),
                   gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
                     crossAxisCount: 7,
-                    childAspectRatio: 0.65,
+                    childAspectRatio: 0.60,
                   ),
                   itemCount: totalDays,
                   itemBuilder: (context, index) {
-                    int day = index + 1;
-                    bool isSelected = selectedDay == day;
-                    bool hasTransaction = _dateKeys.containsKey(
-                      '$currentMonth.$day',
-                    );
+                    final day = index + 1;
+                    final isSelected   = selectedDay == day;
+                    final isRisk       = _isRiskDay(day);          // 서버 예산 초과 위험구간
+                    final isOverspent  = _isOverspentDay(day);     // 과소비일
+                    final hasTx        = _hasTransaction(day);
+                    final dayData      = _calendarDays[day];
+                    final income       = (dayData?['income']  as num?)?.toInt() ?? 0;
+                    final expense      = (dayData?['expense'] as num?)?.toInt() ?? 0;
 
-                    // ✅ 소비 페이스 기반 예상 초과일 이후 빨간색 표시
-                    final exceedDay = _projectedExceedDay;
-                    final isOverPace =
-                        exceedDay != null && day >= exceedDay;
+                    // ── 날짜 원형 스타일 ─────────────────────────────────────
+                    // 선택 중 > 과소비 > 위험구간 > 평상 순위
+                    BoxDecoration circleDecoration;
+                    Color numberColor;
+                    FontWeight numberWeight = FontWeight.w500;
 
-                    // ✅ 실제 수입/지출 금액 표시
-                    final summary = _getDaySummary(day);
-                    final hasIncome = summary['income']! > 0;
-                    final hasExpense = summary['expense']! > 0;
+                    if (isSelected) {
+                      circleDecoration = BoxDecoration(
+                        color: colors.primaryText,
+                        shape: BoxShape.circle,
+                      );
+                      numberColor = colors.background;
+                      numberWeight = FontWeight.bold;
+                    } else if (isOverspent) {
+                      // 과소비 날 — 빨간 원 + 빨간 숫자
+                      circleDecoration = BoxDecoration(
+                        color: expenseColor.withValues(alpha: 0.15),
+                        shape: BoxShape.circle,
+                        border: Border.all(
+                          color: expenseColor.withValues(alpha: 0.6),
+                          width: 1.2,
+                        ),
+                      );
+                      numberColor  = expenseColor;
+                      numberWeight = FontWeight.bold;
+                    } else if (isRisk) {
+                      // 예산 초과 위험구간 날 — 주황색 하이라이트
+                      circleDecoration = BoxDecoration(
+                        color: Colors.orange.withValues(alpha: 0.18),
+                        shape: BoxShape.circle,
+                      );
+                      numberColor = Colors.orange.shade800;
+                    } else {
+                      circleDecoration = const BoxDecoration(shape: BoxShape.circle);
+                      numberColor = colors.primaryText;
+                    }
 
                     return GestureDetector(
                       onTap: () => _onDaySelected(day),
                       child: Column(
                         mainAxisAlignment: MainAxisAlignment.start,
                         children: [
+                          // 날짜 원형
                           Container(
                             width: 28,
                             height: 28,
-                            decoration: isSelected
-                                ? BoxDecoration(
-                                    color: colors.primaryText,
-                                    shape: BoxShape.circle,
-                                  )
-                                : (isOverPace
-                                      ? BoxDecoration(
-                                          color: expenseColor.withValues(
-                                            alpha: 0.18,
-                                          ),
-                                          shape: BoxShape.circle,
-                                        )
-                                      : null),
+                            decoration: circleDecoration,
                             child: Center(
                               child: Text(
                                 '$day',
                                 style: TextStyle(
-                                  fontSize: 14,
-                                  fontWeight: isOverPace
-                                      ? FontWeight.bold
-                                      : FontWeight.w500,
-                                  color: isSelected
-                                      ? colors.background
-                                      : (isOverPace
-                                            ? expenseColor
-                                            : colors.primaryText),
+                                  fontSize: 13,
+                                  fontWeight: numberWeight,
+                                  color: numberColor,
                                 ),
                               ),
                             ),
                           ),
-                          const SizedBox(height: 2),
-                          // ✅ 실제 수입 금액 표시
-                          if (hasIncome)
+                          const SizedBox(height: 1),
+                          // 수입 금액
+                          if (income > 0)
                             Text(
-                              '+${_formatAmount(summary['income']!)}',
-                              style: TextStyle(fontSize: 9, color: incomeColor),
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          // ✅ 실제 지출 금액 표시
-                          if (hasExpense)
-                            Text(
-                              '-${_formatAmount(summary['expense']!)}',
+                              '+${_formatAmount(income)}',
                               style: TextStyle(
-                                fontSize: 9,
-                                color: expenseColor,
+                                fontSize: 8,
+                                color: incomeColor,
+                                fontWeight: FontWeight.w600,
                               ),
                               overflow: TextOverflow.ellipsis,
+                              maxLines: 1,
                             ),
-                          if (hasTransaction)
+                          // 지출 금액
+                          if (expense > 0)
+                            Text(
+                              '-${_formatAmount(expense)}',
+                              style: TextStyle(
+                                fontSize: 8,
+                                color: isOverspent
+                                    ? expenseColor
+                                    : colors.subText,
+                                fontWeight: isOverspent
+                                    ? FontWeight.bold
+                                    : FontWeight.normal,
+                              ),
+                              overflow: TextOverflow.ellipsis,
+                              maxLines: 1,
+                            ),
+                          // 거래 점 인디케이터
+                          if (hasTx && income == 0 && expense == 0)
                             Container(
                               width: 4,
                               height: 4,
@@ -503,7 +616,8 @@ class _LedgerScreenState extends State<LedgerScreen> {
                               decoration: BoxDecoration(
                                 color: isSelected
                                     ? colors.background
-                                    : colors.primaryText.withValues(alpha: 0.4),
+                                    : colors.primaryText
+                                          .withValues(alpha: 0.35),
                                 shape: BoxShape.circle,
                               ),
                             ),

@@ -605,6 +605,125 @@ class ApiService {
     return null;
   }
 
+  // ── 월간 예산 API ─────────────────────────────────────────────
+
+  /// 월간 예산 조회. year/month 생략 시 서버 기준 현재 월.
+  static Future<Map<String, dynamic>?> getMonthlyBudget({
+    int? year,
+    int? month,
+  }) async {
+    try {
+      final data = await request(
+        'GET',
+        _endpointWithQuery('/api/v1/budgets/monthly', {
+          'year': year,
+          'month': month,
+        }),
+      );
+      if (_isSuccessfulResponse(data)) {
+        final budget = data?['data'];
+        if (budget is Map<String, dynamic>) return budget;
+        if (budget is Map) return Map<String, dynamic>.from(budget);
+      }
+    } catch (e) {
+      print('월간 예산 조회 에러: $e');
+    }
+    return null;
+  }
+
+  /// 월간 예산 생성/수정 (같은 year/month면 덮어씀).
+  static Future<Map<String, dynamic>?> setMonthlyBudget({
+    required int year,
+    required int month,
+    required int monthlyLimit,
+  }) async {
+    try {
+      final data = await request(
+        'PUT',
+        '/api/v1/budgets/monthly',
+        body: {
+          'year': year,
+          'month': month,
+          'monthly_limit': monthlyLimit,
+        },
+      );
+      if (_isSuccessfulResponse(data)) {
+        final budget = data?['data'];
+        if (budget is Map<String, dynamic>) return budget;
+        if (budget is Map) return Map<String, dynamic>.from(budget);
+      }
+    } catch (e) {
+      print('월간 예산 저장 에러: $e');
+    }
+    return null;
+  }
+
+  // ── 달력 API ────────────────────────────────────────────────────
+
+  /// 달력 데이터 조회. year/month 생략 시 서버 기준 현재 월.
+  /// 응답의 days[] 배열에 날짜별 income/expense/is_over_budget_risk_day 포함.
+  static Future<Map<String, dynamic>?> getLedgerCalendar({
+    int? year,
+    int? month,
+  }) async {
+    try {
+      final data = await request(
+        'GET',
+        _endpointWithQuery('/api/v1/ledger/calendar', {
+          'year': year,
+          'month': month,
+        }),
+      );
+      if (_isSuccessfulResponse(data)) {
+        final calendar = data?['data'];
+        if (calendar is Map<String, dynamic>) return calendar;
+        if (calendar is Map) return Map<String, dynamic>.from(calendar);
+      }
+    } catch (e) {
+      print('달력 데이터 조회 에러: $e');
+    }
+    return null;
+  }
+
+  // ── 과소비 알림 API ──────────────────────────────────────────────
+
+  /// 과소비 알림 목록 조회.
+  static Future<Map<String, dynamic>?> getAlarms({
+    bool unreadOnly = false,
+    int limit = 50,
+  }) async {
+    try {
+      final data = await request(
+        'GET',
+        _endpointWithQuery('/api/v1/alarms', {
+          'unread_only': unreadOnly,
+          'limit': limit,
+        }),
+      );
+      if (_isSuccessfulResponse(data)) {
+        final result = data?['data'];
+        if (result is Map<String, dynamic>) return result;
+        if (result is Map) return Map<String, dynamic>.from(result);
+      }
+    } catch (e) {
+      print('알림 목록 조회 에러: $e');
+    }
+    return null;
+  }
+
+  /// 알림 읽음 처리.
+  static Future<bool> markAlarmRead(String alarmId) async {
+    try {
+      final data = await request('PATCH', '/api/v1/alarms/$alarmId/read');
+      return _isSuccessfulResponse(data);
+    } catch (e) {
+      print('알림 읽음 처리 에러: $e');
+      return false;
+    }
+  }
+
+  // ── 펫 API ──────────────────────────────────────────────────────
+
   static Future<Map<String, dynamic>?> getPetState() async {
     try {
       final data = await request('GET', '/api/v1/pet');

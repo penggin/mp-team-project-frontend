@@ -21,7 +21,7 @@ class _CharacterSelectScreenState extends State<CharacterSelectScreen> {
       name: '말',
       imagePath: 'assets/horse.png',
       species: 'horse',
-      enabled: false,
+      enabled: true,
     ),
     _CharacterOption(
       name: '돌고래',
@@ -33,7 +33,7 @@ class _CharacterSelectScreenState extends State<CharacterSelectScreen> {
       name: '앵무새',
       imagePath: 'assets/parrot.png',
       species: 'parrot',
-      enabled: false,
+      enabled: true,
     ),
   ];
 
@@ -121,21 +121,21 @@ class _CharacterSelectScreenState extends State<CharacterSelectScreen> {
                     ),
                     child: _isLoading
                         ? const SizedBox(
-                            height: 22,
-                            width: 22,
-                            child: CircularProgressIndicator(
-                              color: Colors.white,
-                              strokeWidth: 2.5,
-                            ),
-                          )
+                      height: 22,
+                      width: 22,
+                      child: CircularProgressIndicator(
+                        color: Colors.white,
+                        strokeWidth: 2.5,
+                      ),
+                    )
                         : Text(
-                            '선택했어요',
-                            style: TextStyle(
-                              fontSize: 17,
-                              fontWeight: FontWeight.bold,
-                              color: colors.primaryText,
-                            ),
-                          ),
+                      '선택했어요',
+                      style: TextStyle(
+                        fontSize: 17,
+                        fontWeight: FontWeight.bold,
+                        color: colors.primaryText,
+                      ),
+                    ),
                   ),
                 ),
               ],
@@ -183,8 +183,8 @@ class _CharacterCard extends StatelessWidget {
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 200),
         curve: Curves.easeOut,
-        width: 100,
-        height: 130,
+        width: (MediaQuery.of(context).size.width - 64) / 3,
+        height: (MediaQuery.of(context).size.width - 64) / 3 * 1.4,
         decoration: BoxDecoration(
           color: Colors.white,
           borderRadius: BorderRadius.circular(20),
@@ -214,7 +214,7 @@ class _CharacterCard extends StatelessWidget {
                       fit: BoxFit.contain,
                       color: character.enabled ? null : Colors.grey,
                       colorBlendMode:
-                          character.enabled ? null : BlendMode.saturation,
+                      character.enabled ? null : BlendMode.saturation,
                     ),
                   ),
                 ),

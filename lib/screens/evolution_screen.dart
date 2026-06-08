@@ -2,20 +2,32 @@ import 'package:flutter/material.dart';
 import 'package:video_player/video_player.dart';
 
 /// 진화 레벨별 사용할 영상 에셋
-String evolutionVideoAsset(int newLevel) {
-  if (newLevel >= 10) return 'assets/evo_bluewhale.mp4';
-  return 'assets/evo_dolphin.mp4';
+String evolutionVideoAsset(int newLevel, {String? species}) {
+  switch (species) {
+    case 'horse':
+      if (newLevel >= 10) return 'assets/evo_unicon.mp4';
+      return 'assets/evo_horse.mp4';
+    case 'parrot':
+      if (newLevel >= 10) return 'assets/evo_final_parrot.mp4';
+      return 'assets/evo_parrot.mp4';
+    case 'dolphin':
+    default:
+      if (newLevel >= 10) return 'assets/evo_bluewhale.mp4';
+      return 'assets/evo_dolphin.mp4';
+  }
 }
 
 class EvolutionScreen extends StatefulWidget {
   final String newCharacterAsset;
   final int newLevel;
+  final String? species;
   final VoidCallback onComplete;
 
   const EvolutionScreen({
     super.key,
     required this.newCharacterAsset,
     required this.newLevel,
+    this.species,
     required this.onComplete,
   });
 
@@ -34,7 +46,7 @@ class _EvolutionScreenState extends State<EvolutionScreen> {
     super.initState();
 
     _evoController = VideoPlayerController.asset(
-      evolutionVideoAsset(widget.newLevel),
+      evolutionVideoAsset(widget.newLevel, species: widget.species),
     )..initialize().then((_) {
         if (!mounted) return;
         setState(() => _evoReady = true);

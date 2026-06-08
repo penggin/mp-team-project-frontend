@@ -10,11 +10,8 @@ import '../app_colors.dart';
 import '../background_task_handler.dart';
 import '../services/payment_push_notification_service.dart';
 
-// (나중에 가계부, 마이페이지 만들면 여기 추가)
-
-// --- 1. 전체 화면을 관리하는 껍데기 (네비게이션 바 전용) ---
 class MainScreen extends StatefulWidget {
-  MainScreen({Key? key}) : super(key: globalKey); // ✅ super.key로 변경
+  MainScreen({Key? key}) : super(key: globalKey);
   static final GlobalKey<MainScreenState> globalKey =
       GlobalKey<MainScreenState>();
 
@@ -23,19 +20,40 @@ class MainScreen extends StatefulWidget {
 }
 
 class MainScreenState extends State<MainScreen> {
-  // 처음 앱을 켜면 '홈(고래)' 화면(인덱스 2)이 보이도록 설정
   int _selectedIndex = 2;
+
+  // GlobalKey를 상수로 선언 — build()마다 재생성 방지
+  static final GlobalKey<State<MainPaymentScreen>> _paymentKey =
+      GlobalKey<State<MainPaymentScreen>>();
+  static final GlobalKey<State<StatisticsScreen>> _statisticsKey =
+      GlobalKey<State<StatisticsScreen>>();
+
+  // IndexedStack에 넘길 화면 목록. 한 번만 생성해서 재사용.
+  // CategoryPaymentScreen만 _paymentKey 상태를 참조하므로 탭 전환 시 build()를 타야 하는데,
+  // IndexedStack 특성상 자식 위젯은 유지되므로 별도 새로고침 없이 최신 데이터를 공유한다.
+  late final List<Widget> _screens;
 
   @override
   void initState() {
     super.initState();
+    _screens = [
+      const SettingsScreen(),
+      MainPaymentScreen(key: _paymentKey),
+      const HomeScreen(),
+      StatisticsScreen(key: _statisticsKey),
+      // CategoryPaymentScreen은 _paymentKey 상태에서 실시간으로 데이터를 읽으므로
+      // 별도 key 없이 StatelessWidget처럼 동작해도 무방하다.
+      // _paymentKey.currentState가 갱신되면 changeTab() → setState() → build() → 최신 데이터 반영.
+      CategoryPaymentScreen(
+        transactions: MainPaymentScreen.transactionsOf(_paymentKey),
+        groupedIndexes: MainPaymentScreen.groupedIndexesOf(_paymentKey),
+      ),
+    ];
     _startForegroundService();
   }
 
   Future<void> _startForegroundService() async {
-    // 알림 및 포그라운드 서비스 권한 요청
     await PaymentPushNotificationService.instance.requestPermissions();
-
     if (await FlutterForegroundTask.isRunningService) return;
     await FlutterForegroundTask.startService(
       serviceId: 256,
@@ -46,36 +64,23 @@ class MainScreenState extends State<MainScreen> {
   }
 
   void changeTab(int index) {
-    setState(() {
-      _selectedIndex = index;
-    });
+    setState(() => _selectedIndex = index);
   }
 
-  // 카테고리 탭 전환 시 데이터 동기화용 public 메서드
   void changeTabWithRefresh(int index) {
-    setState(() {
-      _selectedIndex = index;
-    });
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) setState(() {});
-    });
+    setState(() => _selectedIndex = index);
+    // CategoryPaymentScreen의 경우 _paymentKey 상태를 재읽어야 하므로
+    // 탭 전환 후 한 프레임 뒤에 setState를 한 번 더 호출한다.
+    if (index == 4) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) setState(() {});
+      });
+    }
   }
 
-  // 하단 탭을 눌렀을 때 보여줄 알맹이 화면들 리스트
-  // ✅ CategoryPaymentScreen은 MainPaymentScreen의 상태를 공유하므로
-  // build() 안에서 동적으로 생성시켰니다.
-  static final GlobalKey<State<MainPaymentScreen>> _paymentKey =
-      GlobalKey<State<MainPaymentScreen>>();
-  static final GlobalKey<State<StatisticsScreen>> _statisticsKey =
-      GlobalKey<State<StatisticsScreen>>();
-
-  // 탭을 누르면 실행되는 함수
   void _onItemTapped(int index) {
-    setState(() {
-      _selectedIndex = index;
-    });
+    setState(() => _selectedIndex = index);
 
-    // 탭 전환 시 해당 화면 자동 새로고침 (IndexedStack 캐시 갱신용)
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       if (index == 1) {
@@ -83,7 +88,7 @@ class MainScreenState extends State<MainScreen> {
       } else if (index == 3) {
         StatisticsScreen.reload(_statisticsKey);
       } else if (index == 4) {
-        // 카테고리 탭: 결제이력 데이터를 다시 주입해야 하므로 setState만
+        // CategoryPaymentScreen이 최신 데이터를 반영하도록 setState 한 번 더
         setState(() {});
       }
     });
@@ -92,42 +97,29 @@ class MainScreenState extends State<MainScreen> {
   @override
   Widget build(BuildContext context) {
     final colors = context.watch<ThemeProvider>().colors;
+
+    // CategoryPaymentScreen(index 4)은 _paymentKey 상태 변화 시 최신 데이터 주입 필요.
+    // 탭 전환마다 해당 항목만 교체한다 (나머지 화면은 캐시 유지).
+    final screens = List<Widget>.from(_screens);
+    if (_selectedIndex == 4) {
+      screens[4] = CategoryPaymentScreen(
+        transactions: MainPaymentScreen.transactionsOf(_paymentKey),
+        groupedIndexes: MainPaymentScreen.groupedIndexesOf(_paymentKey),
+      );
+    }
+
     return Scaffold(
-      // 💡 IndexedStack: 화면을 이동해도 영상이 꺼지지 않고 백그라운드에서 유지되게 해주는 마법의 위젯!
-      body: Builder(
-        builder: (context) {
-          // ✅ MainPaymentScreen 상태에서 거래 데이터를 가져와 CategoryPaymentScreen에 주입
-          final transactions = MainPaymentScreen.transactionsOf(_paymentKey);
-          final groupedIndexes = MainPaymentScreen.groupedIndexesOf(
-            _paymentKey,
-          );
-
-          final screens = [
-            const SettingsScreen(),
-            MainPaymentScreen(key: _paymentKey),
-            const HomeScreen(),
-            StatisticsScreen(key: _statisticsKey),
-            CategoryPaymentScreen(
-              transactions: transactions,
-              groupedIndexes: groupedIndexes,
-            ),
-          ];
-
-          return IndexedStack(index: _selectedIndex, children: screens);
-        },
-      ),
+      body: IndexedStack(index: _selectedIndex, children: screens),
       bottomNavigationBar: Container(
-        decoration: BoxDecoration(
-          color: colors.cardBackground, // ✅ 테마 적용 (하늘색 or 핑크)
-        ),
+        decoration: BoxDecoration(color: colors.cardBackground),
         child: BottomNavigationBar(
-          currentIndex: _selectedIndex, // 현재 선택된 탭 알려주기
-          onTap: _onItemTapped, // 탭을 눌렀을 때 화면 바꾸기 함수 실행
+          currentIndex: _selectedIndex,
+          onTap: _onItemTapped,
           type: BottomNavigationBarType.fixed,
           backgroundColor: Colors.transparent,
           elevation: 0,
-          selectedItemColor: colors.accent, // ✅ 테마 적용 (선택된 아이콘)
-          unselectedItemColor: colors.primaryText, // ✅ 테마 적용 (미선택 아이콘)
+          selectedItemColor: colors.accent,
+          unselectedItemColor: colors.primaryText,
           showSelectedLabels: false,
           showUnselectedLabels: false,
           items: const [

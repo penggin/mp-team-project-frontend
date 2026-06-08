@@ -51,22 +51,9 @@ void main() {
                   {'category': 'food', 'amount': 200000},
                   {'category': 'cafe', 'amount': 150000},
                 ],
-                'budget_progress': [
-                  {
-                    'category': 'food',
-                    'monthly_limit': 300000,
-                    'spent': 200000,
-                    'remaining': 100000,
-                    'is_over_limit': false,
-                  },
-                  {
-                    'category': 'cafe',
-                    'monthly_limit': 200000,
-                    'spent': 150000,
-                    'remaining': 50000,
-                    'is_over_limit': false,
-                  },
-                ],
+                'monthly_budget': 1000000,
+                'budget_remaining': 650000,
+                'is_over_budget': false,
               },
             }, 200);
           }
@@ -135,7 +122,7 @@ void main() {
       expect(find.text('1,000,000 원'), findsOneWidget);
       expect(find.text('350,000 원'), findsWidgets);
       expect(find.text('최근 6개월 지출 추이'), findsOneWidget);
-      expect(find.text('예산 500,000 원'), findsOneWidget);
+      expect(find.text('예산 1,000,000 원'), findsOneWidget);
       expect(find.text('지출 350,000 원'), findsOneWidget);
     },
   );

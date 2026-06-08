@@ -35,8 +35,6 @@ class NotificationScreen extends StatefulWidget {
 }
 
 class _NotificationScreenState extends State<NotificationScreen> {
-  static const Duration _liveRefreshInterval = Duration(seconds: 3);
-
   // 백그라운드 서비스와 UI가 같은 알림을 중복 처리하지 않도록 방지
   static final Set<String> _processedNotificationFingerprints = {};
 
@@ -45,21 +43,18 @@ class _NotificationScreenState extends State<NotificationScreen> {
 
   List<AppNotification> _notifications = [];
   bool _isLoading = true;
-  Timer? _liveRefreshTimer;
   StreamSubscription<ServiceNotificationEvent>? _notificationSubscription;
 
   @override
   void initState() {
     super.initState();
     _loadFromBackend();
-    _startLiveRefreshTimer();
     _listenNotificationsDirect();
     FlutterForegroundTask.addTaskDataCallback(_onReceiveTaskData);
   }
 
   @override
   void dispose() {
-    _liveRefreshTimer?.cancel();
     _notificationSubscription?.cancel();
     FlutterForegroundTask.removeTaskDataCallback(_onReceiveTaskData);
     super.dispose();
@@ -104,17 +99,12 @@ class _NotificationScreenState extends State<NotificationScreen> {
     final saved = await ApiService.createLedgerEntry(parsed);
     if (!saved || !mounted) return;
 
-    await _loadFromBackend();
+    // 실제 결제 감지 후에만 다시 로드 (스피너 없이 조용히)
+    await _loadFromBackend(silent: true);
   }
 
-  void _startLiveRefreshTimer() {
-    _liveRefreshTimer?.cancel();
-    print('[알림창] 라이브 새로고침 타이머 시작 (3초 주기)');
-    _liveRefreshTimer = Timer.periodic(_liveRefreshInterval, (_) {
-      print('[알림창] ⏱ 타이머 발화 → _loadFromBackend 호출');
-      _loadFromBackend();
-    });
-  }
+  // 3초 타이머 제거: 실제 결제 감지 시에만 로드함
+  // void _startLiveRefreshTimer() { ... }
 
   void _onReceiveTaskData(dynamic data) {
     if (!mounted) return;
@@ -135,8 +125,10 @@ class _NotificationScreenState extends State<NotificationScreen> {
   }
 
   /// 백엔드에서 가계부 내역을 가져와 최신순으로 표시.
-  Future<void> _loadFromBackend() async {
-    print('[알림창] 📡 _loadFromBackend 시작');
+  /// [silent] = true이면 로딩 스피너 없이 백그라운드 갱신.
+  Future<void> _loadFromBackend({bool silent = false}) async {
+    print('[알림창] 📡 _loadFromBackend 시작 (silent=$silent)');
+    if (!silent) setState(() => _isLoading = true);
     final entries = await ApiService.getLedgerEntries();
     print('[알림창] ✅ API 응답 — 항목 수: ${entries.length}');
     if (entries.isNotEmpty) {

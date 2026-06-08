@@ -14,11 +14,23 @@ import '../services/location_service.dart';
 import 'budget_alert_dialog.dart';
 import 'main_screen.dart';
 
-// 레벨 → 캐릭터 에셋 매핑
-String characterAsset(int level) {
-  if (level >= 10) return 'assets/killerwhale.mp4';
-  if (level >= 5) return 'assets/bluewhale.mp4';
-  return 'assets/dolphin.mp4';
+// 레벨 + species → 캐릭터 에셋 매핑
+String characterAsset(int level, {String? species}) {
+  switch (species) {
+    case 'horse':
+      if (level >= 10) return 'assets/unicon.mp4';
+      if (level >= 5) return 'assets/horse.mp4';
+      return 'assets/pony.mp4';
+    case 'parrot':
+      if (level >= 10) return 'assets/final_parrot.mp4';
+      if (level >= 5) return 'assets/parrot.mp4';
+      return 'assets/green_parrot.mp4';
+    case 'dolphin':
+    default:
+      if (level >= 10) return 'assets/killerwhale.mp4';
+      if (level >= 5) return 'assets/bluewhale.mp4';
+      return 'assets/dolphin.mp4';
+  }
 }
 
 // 진화가 필요한 레벨 임계값
@@ -48,10 +60,9 @@ class _HomeScreenState extends State<HomeScreen> {
   bool _isResettingDemoExp = false;
   String? _petName;
   String? _petSpecies;
-  int? _petMood;
-  int? _petHealth;
-  int? _petCleanliness;
-  int? _petCoins;
+  // mood: 'normal' | 'angry' 문자열 (백엔드 패치 후 int → String)
+  String _petMood = 'normal';
+  // health, cleanliness, coins는 팀 API에서 삭제됨
 
   // 일일 예산 관련
   int _dailyBaseBudget = 0;
@@ -83,6 +94,8 @@ class _HomeScreenState extends State<HomeScreen> {
     _loadAll().then((usesBackendPetState) {
       if (mounted && !usesBackendPetState) _startXpTimer();
     });
+    // _initVideoController는 _loadAll 내부에서 species 확인 후 호출하므로
+    // 여기선 기본값(dolphin)으로 먼저 초기화해 두고 _loadAll 완료 시 교체됨
     _initVideoController(_level);
   }
 
@@ -171,7 +184,8 @@ class _HomeScreenState extends State<HomeScreen> {
   // ─────────────────────────────────────────────────────────────
 
   void _initVideoController(int level) {
-    _videoController = VideoPlayerController.asset(characterAsset(level))
+    _videoController = VideoPlayerController.asset(
+        characterAsset(level, species: _petSpecies))
       ..initialize().then((_) {
         if (!mounted) return;
         setState(() {});
@@ -182,14 +196,24 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<bool> _loadAll() async {
-    final petState = await ApiService.getPetState();
+    final now = DateTime.now();
+
+    // 펫 상태 + 가계부 내역(이번 달) + 월간 예산을 병렬 호출
+    final results = await Future.wait([
+      ApiService.getPetState(),
+      ApiService.getLedgerEntries(year: now.year, month: now.month),
+      ApiService.getMonthlyBudget(year: now.year, month: now.month),
+    ]);
+
+    final petState = results[0] as Map<String, dynamic>?;
+    final entries = results[1] as List<Map<String, dynamic>>;
+    final budgetData = results[2] as Map<String, dynamic>?;
+
     final usesBackendPetState = petState != null;
     if (!usesBackendPetState) {
       await ExperienceService.addTimeBasedExp();
     }
 
-    final entries = await ApiService.getLedgerEntries();
-    final now = DateTime.now();
     int todaySpend = 0;
     int monthlySpend = 0;
 
@@ -204,10 +228,8 @@ class _HomeScreenState extends State<HomeScreen> {
       if (txAtStr.isEmpty) continue;
       try {
         final txAt = DateTime.parse(txAtStr).toLocal();
-        if (txAt.year == now.year && txAt.month == now.month) {
-          monthlySpend += amount;
-          if (txAt.day == now.day) todaySpend += amount;
-        }
+        monthlySpend += amount;
+        if (txAt.day == now.day) todaySpend += amount;
       } catch (_) {}
     }
 
@@ -216,16 +238,29 @@ class _HomeScreenState extends State<HomeScreen> {
       await ExperienceService.applyDailyPenalty(todaySpend);
     }
 
+    // 월간 예산: 서버 API 응답의 monthly_limit 사용
+    // is_configured == false 이거나 API 실패(null) 시 로컬 SharedPreferences 폴백
+    final budgetConfigured = budgetData?['is_configured'] as bool? ?? false;
+    final serverBudget = budgetConfigured
+        ? ((budgetData?['monthly_limit'] as num?)?.toInt() ?? 0)
+        : 0;
+    final monthlyBudget = serverBudget > 0
+        ? serverBudget
+        : await ExperienceService.getMonthlyBudget(); // 서버 미설정/실패 시 로컬 폴백
+    // 서버에서 받았으면 로컬에도 동기
+    if (serverBudget > 0) {
+      await ExperienceService.setMonthlyBudget(serverBudget);
+    }
+
+    final dailyBase = await ExperienceService.getDailyBaseBudget();
+    final carryover = await ExperienceService.getCarryoverAmount();
+
     final totalExp = usesBackendPetState
         ? _intValue(petState['exp']) ?? 0
         : await ExperienceService.getTotalExp();
-    final monthlyBudget = await ExperienceService.getMonthlyBudget();
-    final dailyBase = await ExperienceService.getDailyBaseBudget();
-    final carryover = await ExperienceService.getCarryoverAmount();
     final newLevel =
         (usesBackendPetState ? _intValue(petState['level']) : null) ??
         ExperienceService.levelFromExp(totalExp);
-    // 앱 재시작 시 이전 레벨을 저장된 값으로 복원 → 이미 진화한 레벨에서 재진입해도 진화 화면 미표시
     final persistedLevel = await ExperienceService.getLastLevel();
 
     if (!mounted) return usesBackendPetState;
@@ -233,6 +268,10 @@ class _HomeScreenState extends State<HomeScreen> {
     final shouldEvolve =
         _crossedEvolution(persistedLevel, newLevel) && !_evolutionPending;
     await ExperienceService.saveLastLevel(newLevel);
+
+    // 펫 mood: 이제 'normal' | 'angry' 문자열 (숫자 아님)
+    final moodRaw = petState?['mood']?.toString() ?? 'normal';
+    final petMood = (moodRaw == 'angry') ? 'angry' : 'normal';
 
     setState(() {
       _prevLevel = persistedLevel;
@@ -251,16 +290,7 @@ class _HomeScreenState extends State<HomeScreen> {
       _petSpecies = usesBackendPetState
           ? _stringValue(petState['species'])
           : _petSpecies;
-      _petMood = usesBackendPetState ? _intValue(petState['mood']) : _petMood;
-      _petHealth = usesBackendPetState
-          ? _intValue(petState['health'])
-          : _petHealth;
-      _petCleanliness = usesBackendPetState
-          ? _intValue(petState['cleanliness'])
-          : _petCleanliness;
-      _petCoins = usesBackendPetState
-          ? _intValue(petState['coins'])
-          : _petCoins;
+      _petMood = usesBackendPetState ? petMood : _petMood;
       if (shouldEvolve) _evolutionPending = true;
     });
 
@@ -288,7 +318,7 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   void _refreshCharacterIfNeeded(int newLevel) {
-    final needed = characterAsset(newLevel);
+    final needed = characterAsset(newLevel, species: _petSpecies);
     if (_videoController.dataSource.contains(needed.split('/').last)) return;
     _videoController.dispose();
     _initVideoController(newLevel);
@@ -364,8 +394,9 @@ class _HomeScreenState extends State<HomeScreen> {
           return FadeTransition(
             opacity: animation,
             child: EvolutionScreen(
-              newCharacterAsset: characterAsset(_level),
+              newCharacterAsset: characterAsset(_level, species: _petSpecies),
               newLevel: _level,
+              species: _petSpecies,
               onComplete: () {
                 if (!mounted) return;
                 setState(() => _evolutionPending = false);
@@ -649,10 +680,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         spacing: 8,
                         runSpacing: 8,
                         children: [
-                          _buildPetStatusChip('기분', _petMood, colors),
-                          _buildPetStatusChip('건강', _petHealth, colors),
-                          _buildPetStatusChip('청결', _petCleanliness, colors),
-                          _buildPetStatusChip('코인', _petCoins, colors),
+                          _buildPetMoodChip(_petMood, colors),
                         ],
                       ),
                       const SizedBox(height: 20),
@@ -697,7 +725,7 @@ class _HomeScreenState extends State<HomeScreen> {
                               style: TextStyle(
                                 fontSize: 16,
                                 fontWeight: FontWeight.bold,
-                                color:
+                                 color:
                                     remainingBudget != null &&
                                         remainingBudget < 0
                                     ? Colors.red
@@ -773,23 +801,66 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   String _characterLabel(int level) {
-    if (level >= 10) return '범고래';
-    if (level >= 5) return '파란 고래';
-    return '돌고래';
+    switch (_petSpecies) {
+      case 'horse':
+        if (level >= 10) return '유니콘';
+        if (level >= 5) return '말';
+        return '조랑말';
+      case 'parrot':
+        if (level >= 10) return '파이널 앵무새';
+        if (level >= 5) return '앵무새';
+        return '초록 앵무새';
+      case 'dolphin':
+      default:
+        if (level >= 10) return '범고래';
+        if (level >= 5) return '파란 고래';
+        return '돌고래';
+    }
   }
 
   String? _petSpeciesLabel(String species) {
     switch (species) {
-      case 'killer_whale':
-      case 'orca':
-        return '범고래';
-      case 'blue_whale':
-        return '파란 고래';
+      case 'horse':
+        return '말';
+      case 'parrot':
+        return '앵무새';
       case 'dolphin':
         return '돌고래';
       default:
         return null;
     }
+  }
+
+  Widget _buildPetMoodChip(String mood, ThemeColors colors) {
+    final isAngry = mood == 'angry';
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: isAngry
+            ? Colors.red.withValues(alpha: 0.12)
+            : colors.background,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            isAngry ? Icons.mood_bad : Icons.mood,
+            size: 14,
+            color: isAngry ? Colors.red : colors.primaryText,
+          ),
+          const SizedBox(width: 4),
+          Text(
+            isAngry ? '화남' : '평온',
+            style: TextStyle(
+              color: isAngry ? Colors.red : colors.primaryText,
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   Widget _buildPetStatusChip(String label, int? value, ThemeColors colors) {
