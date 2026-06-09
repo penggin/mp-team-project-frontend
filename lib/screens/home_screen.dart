@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:video_player/video_player.dart';
@@ -12,22 +13,23 @@ import '../services/api_service.dart';
 import 'budget_alert_dialog.dart';
 import 'main_screen.dart';
 
-// 레벨 + species → 캐릭터 에셋 매핑
-String characterAsset(int level, {String? species}) {
+// 레벨 + species (+ angry) → 캐릭터 에셋 매핑
+String characterAsset(int level, {String? species, bool angry = false}) {
+  final suffix = angry ? '_rage' : '';
   switch (species) {
     case 'horse':
-      if (level >= 10) return 'assets/unicon.mp4';
-      if (level >= 5) return 'assets/horse.mp4';
-      return 'assets/pony.mp4';
+      if (level >= 10) return 'assets/unicon$suffix.mp4';
+      if (level >= 5) return 'assets/horse$suffix.mp4';
+      return 'assets/pony$suffix.mp4';
     case 'parrot':
-      if (level >= 10) return 'assets/final_parrot.mp4';
-      if (level >= 5) return 'assets/parrot.mp4';
-      return 'assets/green_parrot.mp4';
+      if (level >= 10) return 'assets/final_parrot$suffix.mp4';
+      if (level >= 5) return 'assets/parrot$suffix.mp4';
+      return 'assets/green_parrot$suffix.mp4';
     case 'dolphin':
     default:
-      if (level >= 10) return 'assets/killerwhale.mp4';
-      if (level >= 5) return 'assets/bluewhale.mp4';
-      return 'assets/dolphin.mp4';
+      if (level >= 10) return 'assets/killerwhale$suffix.mp4';
+      if (level >= 5) return 'assets/bluewhale$suffix.mp4';
+      return 'assets/dolphin$suffix.mp4';
   }
 }
 
@@ -76,6 +78,12 @@ class _HomeScreenState extends State<HomeScreen> {
 
   String _currentComment = "캐릭터를 클릭하면 멘트가 나와요!";
   VideoPlayerController? _videoController;
+  String? _currentAsset;
+
+  // 분노 리액션(에피소드) 관련
+  Timer? _angryTimer;
+  bool _showAngryAnim = false;
+  static const Duration _angryReactionDuration = Duration(seconds: 5);
 
   @override
   void initState() {
@@ -102,6 +110,10 @@ class _HomeScreenState extends State<HomeScreen> {
         Navigator.of(context).popUntil((route) => route.isFirst);
         MainScreen.globalKey.currentState?.changeTab(1);
       },
+      onWasteful: () {
+        // "불필요한 금액입니다" 체크 → 캐릭터가 즉시 분노 영상 재생
+        _triggerAngryReaction();
+      },
     );
   }
 
@@ -109,8 +121,28 @@ class _HomeScreenState extends State<HomeScreen> {
   void dispose() {
     ExperienceService.demoModeEnabled.removeListener(_onDemoModeChanged);
     ExperienceService.monthlyBudgetNotifier.removeListener(_onBudgetChanged);
+    _angryTimer?.cancel();
     _videoController?.dispose();
     super.dispose();
+  }
+
+  /// 일일 예산 초과 결제가 발생한 순간 캐릭터가 잠깐 분노했다가 평상시로 복귀하도록 트리거
+  void _triggerAngryReaction() {
+    final level = _level;
+    if (!mounted || level == null) return;
+    _angryTimer?.cancel();
+    setState(() {
+      _showAngryAnim = true;
+      // 종/단계에 맞는 꾸짖는 멘트로 즉시 교체 — 리액션이 끝나도 다음 탭 전까지 유지.
+      _currentComment = _pickAngryComment();
+    });
+    _refreshCharacterIfNeeded(level); // rage 영상으로 전환
+    _angryTimer = Timer(_angryReactionDuration, () {
+      if (!mounted) return;
+      setState(() => _showAngryAnim = false);
+      final lvl = _level;
+      if (lvl != null) _refreshCharacterIfNeeded(lvl); // 평상시 영상 복귀
+    });
   }
 
   void _onDemoModeChanged() {
@@ -125,11 +157,22 @@ class _HomeScreenState extends State<HomeScreen> {
     _loadAll();
   }
 
+  /// 분노 영상은 짧은 리액션 동안에만 켜진다(에피소드 모델).
+  bool get _isAngry => _showAngryAnim;
+
+  /// 무드 칩 등 "지속" 표시를 위한 일일 예산 초과 여부.
+  /// 백엔드가 angry 라고 알려주면 그것도 같이 반영한다.
+  bool get _isOverBudget {
+    if (_petMood == 'angry') return true;
+    final totalBudget = _dailyBaseBudget + _carryover;
+    return totalBudget > 0 && _todaySpend > totalBudget;
+  }
+
   void _initVideoController(int level) {
-    final controller = VideoPlayerController.asset(
-      characterAsset(level, species: _petSpecies),
-    );
+    final asset = characterAsset(level, species: _petSpecies, angry: _isAngry);
+    final controller = VideoPlayerController.asset(asset);
     _videoController = controller;
+    _currentAsset = asset;
     controller.initialize().then((_) {
       if (!mounted || _videoController != controller) return;
       setState(() {});
@@ -247,9 +290,12 @@ class _HomeScreenState extends State<HomeScreen> {
     if (newLevel == null) return;
     if (shouldEvolve) {
       WidgetsBinding.instance.addPostFrameCallback((_) => _triggerEvolution());
-    } else {
-      _refreshCharacterIfNeeded(newLevel);
+      return;
     }
+
+    // 분노 리액션은 더 이상 과소비 감지로 자동 발동되지 않는다.
+    // BudgetAlertDialog 의 "불필요한 금액입니다" 체크에서만 _triggerAngryReaction() 이 호출된다.
+    _refreshCharacterIfNeeded(newLevel);
   }
 
   int? _validLevel(Object? value) {
@@ -271,13 +317,13 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   void _refreshCharacterIfNeeded(int newLevel) {
-    final needed = characterAsset(newLevel, species: _petSpecies);
-    final currentController = _videoController;
-    if (currentController != null &&
-        currentController.dataSource.contains(needed.split('/').last)) {
-      return;
-    }
-    currentController?.dispose();
+    final needed = characterAsset(
+      newLevel,
+      species: _petSpecies,
+      angry: _isAngry,
+    );
+    if (_videoController != null && _currentAsset == needed) return;
+    _videoController?.dispose();
     _initVideoController(newLevel);
   }
 
@@ -381,10 +427,87 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
+  /// 종(species) × 진화 단계별로 과소비를 꾸짖는 멘트 풀.
+  /// level: 1~4 → 1단계, 5~9 → 2단계, 10+ → 3단계
+  List<String> _angryCommentsFor(String? species, int level) {
+    switch (species) {
+      case 'horse':
+        if (level >= 10) {
+          return const [
+            "유니콘도 못 막는 과소비라니… 답이 없네.",
+            "예산 초과야. 이번엔 진짜 실망했어.",
+            "이 지출, 진짜 꼭 필요했어?",
+          ];
+        }
+        if (level >= 5) {
+          return const [
+            "히이잉! 또 예산을 넘기다니, 정신 차리세요!",
+            "이러시면 못 달려요. 잠깐 멈춰 보세요.",
+            "한 번만 더 결제하면 진짜 화낼 거예요.",
+          ];
+        }
+        return const [
+          "히힝! 또 사면 어떡해요!",
+          "조랑말도 이건 못 봐줘요…",
+          "흥! 오늘은 안 놀아줄 거예요!",
+        ];
+      case 'parrot':
+        if (level >= 10) {
+          return const [
+            "또 예산 초과네. 학습 능력 어디 갔어?",
+            "내가 몇 번을 말했지? 이번이 진짜 마지막 경고야.",
+            "한 번 더 묻자. 그거 정말 필요했어?",
+          ];
+        }
+        if (level >= 5) {
+          return const [
+            "주의! 일일 예산을 초과했습니다!",
+            "또 그러시면 진짜로 화낼 거예요!",
+            "조금만 참으셨어도 됐을 텐데요…",
+          ];
+        }
+        return const [
+          "과소비! 과소비! 안 돼! 안 돼!",
+          "예산 초과… 예산 초과… 흥!",
+          "또 샀어? 또 샀어?! 으악!",
+        ];
+      case 'dolphin':
+      default:
+        if (level >= 10) {
+          return const [
+            "예산 초과다. 다음 결제는 멈춰라.",
+            "또 과소비? 내 인내심에도 한계가 있다.",
+            "한 번 더 그러면 가만 안 둔다…!",
+          ];
+        }
+        if (level >= 5) {
+          return const [
+            "벌써 예산을 넘기다니, 정신 차리세요!",
+            "이번 달에도 이러시면 곤란해요.",
+            "푸우… 과소비는 멈춰주세요.",
+          ];
+        }
+        return const [
+          "또 과소비예요?! 흥, 삐졌어요!",
+          "오늘 예산 다 썼다고요… 진짜로요?",
+          "끼익! 지갑이 운다고요!",
+        ];
+    }
+  }
+
+  String _pickAngryComment() {
+    final pool = _angryCommentsFor(_petSpecies, _level ?? 1);
+    return pool[Random().nextInt(pool.length)];
+  }
+
   Future<void> _generateRandomComment() async {
     final random = Random();
+    // 예산 초과 중에는 꾸짖는 멘트 풀에서, 아니면 평상시 풀에서 선택.
+    final pool = _isOverBudget
+        ? _angryCommentsFor(_petSpecies, _level ?? 1)
+        : _comments;
     setState(() {
-      _currentComment = _comments[random.nextInt(_comments.length)];
+      _currentComment = pool[random.nextInt(pool.length)];
     });
 
     if (_level == null || _isInteractingPet) return;
@@ -633,7 +756,12 @@ class _HomeScreenState extends State<HomeScreen> {
                       Wrap(
                         spacing: 8,
                         runSpacing: 8,
-                        children: [_buildPetMoodChip(_petMood, colors)],
+                        children: [
+                          _buildPetMoodChip(
+                            _isOverBudget ? 'angry' : 'normal',
+                            colors,
+                          ),
+                        ],
                       ),
                       const SizedBox(height: 20),
                     ],

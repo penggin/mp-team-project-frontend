@@ -7,17 +7,28 @@ class BudgetAlertDialog extends StatefulWidget {
   /// 알림창에서 "그룹화를 해야합니다"를 체크했을 때 전체 결제 이력 화면으로 이동하는 콜백
   final VoidCallback onGoToHistory;
 
-  const BudgetAlertDialog({super.key, required this.onGoToHistory});
+  /// "불필요한 금액입니다" 를 체크했을 때 호출 — 캐릭터 분노 리액션 등에 사용
+  final VoidCallback? onWasteful;
+
+  const BudgetAlertDialog({
+    super.key,
+    required this.onGoToHistory,
+    this.onWasteful,
+  });
 
   /// showDialog를 통해 간편하게 표시
   static Future<void> show(
     BuildContext context, {
     required VoidCallback onGoToHistory,
+    VoidCallback? onWasteful,
   }) {
     return showDialog(
       context: context,
       barrierDismissible: false,
-      builder: (_) => BudgetAlertDialog(onGoToHistory: onGoToHistory),
+      builder: (_) => BudgetAlertDialog(
+        onGoToHistory: onGoToHistory,
+        onWasteful: onWasteful,
+      ),
     );
   }
 
@@ -121,7 +132,10 @@ class _BudgetAlertDialogState extends State<BudgetAlertDialog>
             _AlertCheckItem(
               label: '불필요한 금액입니다',
               colors: colors,
-              onTap: () => Navigator.of(context).pop(),
+              onTap: () {
+                Navigator.of(context).pop();
+                widget.onWasteful?.call();
+              },
             ),
             _AlertCheckItem(
               label: '제외해야할 금액입니다',

@@ -96,6 +96,15 @@ flutter:
     - assets/unicon.mp4
     - assets/evo_parrot.mp4
     - assets/evo_final_parrot.mp4
+    - assets/dolphin_rage.mp4
+    - assets/bluewhale_rage.mp4
+    - assets/killerwhale_rage.mp4
+    - assets/pony_rage.mp4
+    - assets/horse_rage.mp4
+    - assets/unicon_rage.mp4
+    - assets/green_parrot_rage.mp4
+    - assets/parrot_rage.mp4
+    - assets/final_parrot_rage.mp4
 
   # The following line ensures that the Material Icons font is
   # included with your application, so that you can use the icons in
