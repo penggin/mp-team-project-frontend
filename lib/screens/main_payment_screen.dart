@@ -87,6 +87,18 @@ class MainPaymentScreen extends StatefulWidget {
     return {};
   }
 
+  static List<TransactionGroup> groupsOf(GlobalKey<State<MainPaymentScreen>> key) {
+    final s = key.currentState;
+    if (s is _MainPaymentScreenState) return s._groups;
+    return [];
+  }
+
+  static int currentMonthOf(GlobalKey<State<MainPaymentScreen>> key) {
+    final s = key.currentState;
+    if (s is _MainPaymentScreenState) return s.currentMonth;
+    return DateTime.now().month;
+  }
+
   /// 외부(main_screen 탭 전환 등)에서 거래 내역 새로고침 트리거
   static void reload(GlobalKey<State<MainPaymentScreen>> key) {
     final s = key.currentState;
@@ -178,14 +190,36 @@ class _MainPaymentScreenState extends State<MainPaymentScreen>
   // ✅ 활성 거래(그룹화 제외)에서 카테고리 요약을 동적으로 계산
   List<CategorySummary> get _categories {
     final Map<String, int> totals = {};
+
+    // 1) 그룹화되지 않은 일반 지출 항목
     for (int i = 0; i < _transactions.length; i++) {
       if (_groupedIndexes.contains(i)) continue;
       final tx = _transactions[i];
-      if (tx.isIncome) continue; // 지출만 집계
+      if (tx.isIncome) continue;
       final raw = tx.amount.replaceAll(RegExp(r'[^0-9]'), '');
       final val = int.tryParse(raw) ?? 0;
       totals[tx.category] = (totals[tx.category] ?? 0) + val;
     }
+
+    // 2) 각 그룹의 내 지출(총지출 - 수입)을 기타로 합산
+    for (final group in _groups) {
+      int groupExpense = 0;
+      int groupIncome = 0;
+      for (final tx in group.items) {
+        final raw = tx.amount.replaceAll(RegExp(r'[^0-9]'), '');
+        final val = int.tryParse(raw) ?? 0;
+        if (tx.isIncome) {
+          groupIncome += val;
+        } else {
+          groupExpense += val;
+        }
+      }
+      final myExpense = groupExpense - groupIncome;
+      if (myExpense > 0) {
+        totals['기타'] = (totals['기타'] ?? 0) + myExpense;
+      }
+    }
+
     // 금액 큰 순으로 정렬
     final entries = totals.entries.toList()
       ..sort((a, b) => b.value.compareTo(a.value));
@@ -200,9 +234,11 @@ class _MainPaymentScreenState extends State<MainPaymentScreen>
         .toList();
   }
 
-  // ✅ 활성 거래(그룹화 제외) 지출 총합
+  // ✅ 활성 거래(그룹화 제외) + 각 그룹의 내 지출 합산
   String get _totalAmount {
     int total = 0;
+
+    // 1) 그룹화되지 않은 일반 지출
     for (int i = 0; i < _transactions.length; i++) {
       if (_groupedIndexes.contains(i)) continue;
       final tx = _transactions[i];
@@ -210,6 +246,24 @@ class _MainPaymentScreenState extends State<MainPaymentScreen>
       final raw = tx.amount.replaceAll(RegExp(r'[^0-9]'), '');
       total += int.tryParse(raw) ?? 0;
     }
+
+    // 2) 각 그룹의 내 지출(총지출 - 수입) 추가
+    for (final group in _groups) {
+      int groupExpense = 0;
+      int groupIncome = 0;
+      for (final tx in group.items) {
+        final raw = tx.amount.replaceAll(RegExp(r'[^0-9]'), '');
+        final val = int.tryParse(raw) ?? 0;
+        if (tx.isIncome) {
+          groupIncome += val;
+        } else {
+          groupExpense += val;
+        }
+      }
+      final myExpense = groupExpense - groupIncome;
+      if (myExpense > 0) total += myExpense;
+    }
+
     final formatted = total.toString().replaceAllMapped(
       RegExp(r'(\d)(?=(\d{3})+(?!\d))'),
       (m) => '${m[1]},',
@@ -462,14 +516,21 @@ class _MainPaymentScreenState extends State<MainPaymentScreen>
       return;
     }
 
-    // bundle_date: 선택한 항목의 가장 빠른 거래일을 그룹 대표 날짜로 사용
+    // bundle_date: 선택한 항목 중 지출 기준 가장 늦은 거래일을 그룹 대표 날짜로 사용
     final dates = selectedItems
+        .where((it) => !it.isIncome && it.createdAt != null)
+        .map((it) => it.createdAt!)
+        .toList();
+    // 지출이 없으면 전체 항목 중 가장 늦은 날짜 사용
+    final allDates = selectedItems
         .map((it) => it.createdAt)
         .whereType<DateTime>()
         .toList();
-    final bundleDate = dates.isEmpty
-        ? DateTime.now()
-        : dates.reduce((a, b) => a.isBefore(b) ? a : b);
+    final bundleDate = dates.isNotEmpty
+        ? dates.reduce((a, b) => a.isAfter(b) ? a : b)
+        : allDates.isNotEmpty
+        ? allDates.reduce((a, b) => a.isAfter(b) ? a : b)
+        : DateTime.now();
 
     final groupName = '그룹${_groups.length + 1}';
 
@@ -875,7 +936,7 @@ class _MainPaymentScreenState extends State<MainPaymentScreen>
                       child: ScaleTransition(
                         scale: _fabScaleAnim,
                         child: GestureDetector(
-                          onTap: _enterGroupSelectMode, // ✅ 그룹 생성 진입
+                          onTap: _enterGroupSelectMode,
                           child: Container(
                             margin: const EdgeInsets.only(bottom: 10),
                             padding: const EdgeInsets.symmetric(
@@ -914,7 +975,6 @@ class _MainPaymentScreenState extends State<MainPaymentScreen>
                         child: GestureDetector(
                           onTap: () {
                             _closeFab();
-
                             Navigator.push<bool>(
                               context,
                               MaterialPageRoute(
@@ -1007,11 +1067,9 @@ class _MainPaymentScreenState extends State<MainPaymentScreen>
   }
 
   List<Widget> _buildTransactionList(ThemeColors colors) {
-    // 그룹을 날짜 순으로 인라인 표시하기 위해 표시할 항목을 리스트로 구성
-    // 각 항목은 {‘type’: ‘tx’, ‘index’: i, ‘date’: ...} 또는 {‘type’: ‘group’, ‘group’: ..., ‘date’: ...}
     final List<Map<String, dynamic>> displayItems = [];
 
-    // 1) 그룹이 아닌 일반 거래 코드 목록
+    // 1) 그룹이 아닌 일반 거래
     for (int i = 0; i < _transactions.length; i++) {
       if (_groupedIndexes.contains(i)) continue;
       final tx = _transactions[i];
@@ -1024,20 +1082,28 @@ class _MainPaymentScreenState extends State<MainPaymentScreen>
       });
     }
 
-    // 2) 그룹: 그룹 내 가장 맨 위(=가장 여리다는 이용 날짜와 가까운) 항목의 createdAt을 sortKey로
+    // 2) 그룹: bundleDate(지출 기준 가장 늦은 날짜)를 sortKey로 사용
     for (final group in _groups) {
-      DateTime sortKey = DateTime(0);
-      String date = '';
-      for (final item in group.items) {
-        if (item.createdAt != null) {
-          if (item.createdAt!.isAfter(sortKey)) {
+      DateTime sortKey;
+      String date;
+      if (group.bundleDate != null) {
+        // bundleDate 우선 사용
+        sortKey = group.bundleDate!.toLocal();
+        date = '${sortKey.month}.${sortKey.day}';
+      } else {
+        // 없으면 지출 항목 중 가장 늦은 날짜로 폴백
+        sortKey = DateTime(0);
+        date = '';
+        for (final item in group.items) {
+          if (item.isIncome) continue;
+          if (item.createdAt != null && item.createdAt!.isAfter(sortKey)) {
             sortKey = item.createdAt!;
             date = item.date;
           }
         }
-      }
-      if (date.isEmpty && group.items.isNotEmpty) {
-        date = group.items.first.date;
+        if (date.isEmpty && group.items.isNotEmpty) {
+          date = group.items.first.date;
+        }
       }
       displayItems.add({
         'type': 'group',

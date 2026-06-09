@@ -152,7 +152,22 @@ class _GroupPaymentScreenState extends State<GroupPaymentScreen>
     return total;
   }
 
-  int get _myExpense => (_totalExpense * 0.4).toInt();
+  // 내 지출 = 총 지출 - 그룹 내 수입 합계
+  int get _totalIncome {
+    int total = 0;
+    for (final tx in _items) {
+      if (tx.isIncome) {
+        final str = tx.amount.replaceAll(RegExp(r'[^0-9]'), '');
+        total += int.tryParse(str) ?? 0;
+      }
+    }
+    return total;
+  }
+
+  int get _myExpense {
+    final result = _totalExpense - _totalIncome;
+    return result < 0 ? 0 : result;
+  }
 
   String _fmt(int amount) => amount.toString().replaceAllMapped(
     RegExp(r'(\d)(?=(\d{3})+(?!\d))'),
