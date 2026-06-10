@@ -103,7 +103,9 @@ class _LedgerScreenState extends State<LedgerScreen> {
           for (final d in daysList) {
             if (d is Map) {
               final day = d['day'] as int?;
-              if (day != null) newCalendarDays[day] = Map<String, dynamic>.from(d);
+              if (day != null) {
+                newCalendarDays[day] = Map<String, dynamic>.from(d);
+              }
             }
           }
         }
@@ -112,21 +114,34 @@ class _LedgerScreenState extends State<LedgerScreen> {
       // 폴백: 달력 API 비었으면 entries로 직접 집계
       if (newCalendarDays.isEmpty && entries.isNotEmpty) {
         for (final entry in entries) {
-          final txAtStr = (entry['transaction_at'] ?? entry['created_at'] ?? '') as String;
+          final txAtStr =
+              (entry['transaction_at'] ?? entry['created_at'] ?? '') as String;
           if (txAtStr.isEmpty) continue;
           try {
             final txDate = DateTime.parse(txAtStr).toLocal();
-            if (txDate.year != currentYear || txDate.month != currentMonth) continue;
+            if (txDate.year != currentYear || txDate.month != currentMonth) {
+              continue;
+            }
             final day = txDate.day;
             final amount = (entry['amount'] as num?)?.toInt() ?? 0;
             final type = entry['type']?.toString() ?? '';
-            final cur = newCalendarDays.putIfAbsent(day, () => {
-              'day': day, 'income': 0, 'expense': 0,
-              'transfer': 0, 'is_over_budget_risk_day': false,
-            });
-            if (type == 'income') cur['income'] = ((cur['income'] as int?) ?? 0) + amount;
-            else if (type == 'expense') cur['expense'] = ((cur['expense'] as int?) ?? 0) + amount;
-            else if (type == 'transfer') cur['transfer'] = ((cur['transfer'] as int?) ?? 0) + amount;
+            final cur = newCalendarDays.putIfAbsent(
+              day,
+              () => {
+                'day': day,
+                'income': 0,
+                'expense': 0,
+                'transfer': 0,
+                'is_over_budget_risk_day': false,
+              },
+            );
+            if (type == 'income') {
+              cur['income'] = ((cur['income'] as int?) ?? 0) + amount;
+            } else if (type == 'expense') {
+              cur['expense'] = ((cur['expense'] as int?) ?? 0) + amount;
+            } else if (type == 'transfer') {
+              cur['transfer'] = ((cur['transfer'] as int?) ?? 0) + amount;
+            }
           } catch (_) {}
         }
       }
@@ -137,13 +152,17 @@ class _LedgerScreenState extends State<LedgerScreen> {
         final isIncome = type == 'income';
         final amount = (entry['amount'] as num?)?.toInt() ?? 0;
         final merchant = entry['merchant_name']?.toString().trim();
-        final category = CategoryMapper.toDisplay(entry['category']?.toString());
+        final category = CategoryMapper.toDisplay(
+          entry['category']?.toString(),
+        );
         final transactionAt = DateTime.tryParse(
           entry['transaction_at']?.toString() ?? '',
         )?.toLocal();
         final id = entry['id']?.toString();
         final bundleIdRaw = entry['bundle_id']?.toString();
-        final bundleId = (bundleIdRaw == null || bundleIdRaw.isEmpty) ? null : bundleIdRaw;
+        final bundleId = (bundleIdRaw == null || bundleIdRaw.isEmpty)
+            ? null
+            : bundleIdRaw;
         return TransactionItem(
           date: transactionAt == null
               ? '$currentMonth.1'
@@ -167,7 +186,8 @@ class _LedgerScreenState extends State<LedgerScreen> {
           ? await ApiService.getLedgerBundles()
           : <Map<String, dynamic>>[];
       final groupingState = MainPaymentScreen.buildGroupingState(
-        allTransactions, bundles,
+        allTransactions,
+        bundles,
       );
 
       // ── 화면용 거래 목록 변환 (그룹화된 항목 제외) ─────────────
@@ -186,7 +206,8 @@ class _LedgerScreenState extends State<LedgerScreen> {
         });
       }
       converted.sort(
-        (a, b) => (b['fullDate'] as DateTime).compareTo(a['fullDate'] as DateTime),
+        (a, b) =>
+            (b['fullDate'] as DateTime).compareTo(a['fullDate'] as DateTime),
       );
 
       // ── GlobalKey 생성 ────────────────────────────────────────────
@@ -195,13 +216,17 @@ class _LedgerScreenState extends State<LedgerScreen> {
       for (int i = 0; i < converted.length; i++) {
         final dateStr = converted[i]['date'] as String;
         newItemKeys[i] = GlobalKey();
-        if (!newDateKeys.containsKey(dateStr)) newDateKeys[dateStr] = newItemKeys[i]!;
+        if (!newDateKeys.containsKey(dateStr)) {
+          newDateKeys[dateStr] = newItemKeys[i]!;
+        }
       }
 
       // ── 메타 정보 ─────────────────────────────────────────────────
       final overBudgetStartDay = calendarData?['over_budget_start_day'] as int?;
-      final budgetConfigured = calendarData?['budget_configured'] as bool? ?? false;
-      final isCurrentMonth = calendarData?['is_current_month'] as bool? ?? false;
+      final budgetConfigured =
+          calendarData?['budget_configured'] as bool? ?? false;
+      final isCurrentMonth =
+          calendarData?['is_current_month'] as bool? ?? false;
 
       double dailyAvgExpense =
           (calendarData?['daily_average_expense'] as num?)?.toDouble() ?? 0.0;
@@ -210,9 +235,14 @@ class _LedgerScreenState extends State<LedgerScreen> {
         int daysWithExpense = 0;
         for (final d in newCalendarDays.values) {
           final exp = (d['expense'] as num?)?.toInt() ?? 0;
-          if (exp > 0) { totalExpense += exp; daysWithExpense++; }
+          if (exp > 0) {
+            totalExpense += exp;
+            daysWithExpense++;
+          }
         }
-        if (daysWithExpense > 0) dailyAvgExpense = totalExpense / daysWithExpense;
+        if (daysWithExpense > 0) {
+          dailyAvgExpense = totalExpense / daysWithExpense;
+        }
       }
 
       setState(() {
@@ -220,9 +250,15 @@ class _LedgerScreenState extends State<LedgerScreen> {
         _allTransactions = allTransactions;
         _groups = groupingState.groups;
         _groupedIndexes = groupingState.groupedIndexes;
-        _calendarDays..clear()..addAll(newCalendarDays);
-        _dateKeys..clear()..addAll(newDateKeys);
-        _itemKeys..clear()..addAll(newItemKeys);
+        _calendarDays
+          ..clear()
+          ..addAll(newCalendarDays);
+        _dateKeys
+          ..clear()
+          ..addAll(newDateKeys);
+        _itemKeys
+          ..clear()
+          ..addAll(newItemKeys);
         _overBudgetStartDay = budgetConfigured ? overBudgetStartDay : null;
         _dailyAvgExpense = dailyAvgExpense;
         _budgetConfigured = budgetConfigured;
@@ -268,9 +304,6 @@ class _LedgerScreenState extends State<LedgerScreen> {
     }
   }
 
-  bool _hasTransaction(int day) =>
-      _dateKeys.containsKey('$currentMonth.$day') || _hasGroupOnDay(day);
-
   bool _isOverspentDay(int day) {
     if (_dailyAvgExpense <= 0) return false;
     final expense = (_calendarDays[day]?['expense'] as num?)?.toDouble() ?? 0;
@@ -283,8 +316,13 @@ class _LedgerScreenState extends State<LedgerScreen> {
   void _changeMonth(int delta) {
     setState(() {
       currentMonth += delta;
-      if (currentMonth > 12) { currentMonth = 1; currentYear++; }
-      else if (currentMonth < 1) { currentMonth = 12; currentYear--; }
+      if (currentMonth > 12) {
+        currentMonth = 1;
+        currentYear++;
+      } else if (currentMonth < 1) {
+        currentMonth = 12;
+        currentYear--;
+      }
       selectedDay = null;
     });
     _fetchLedgerData();
@@ -309,20 +347,34 @@ class _LedgerScreenState extends State<LedgerScreen> {
 
   int _daysInMonth(int year, int month) => DateTime(year, month + 1, 0).day;
 
-  Widget _buildLegend({required Color color, required String label, bool isBorder = false}) {
+  Widget _buildLegend({
+    required Color color,
+    required String label,
+    bool isBorder = false,
+  }) {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
         Container(
-          width: 12, height: 12,
+          width: 12,
+          height: 12,
           decoration: BoxDecoration(
             color: color.withValues(alpha: 0.18),
             shape: BoxShape.circle,
-            border: isBorder ? Border.all(color: color.withValues(alpha: 0.6), width: 1.2) : null,
+            border: isBorder
+                ? Border.all(color: color.withValues(alpha: 0.6), width: 1.2)
+                : null,
           ),
         ),
         const SizedBox(width: 4),
-        Text(label, style: TextStyle(fontSize: 10, color: color, fontWeight: FontWeight.w600)),
+        Text(
+          label,
+          style: TextStyle(
+            fontSize: 10,
+            color: color,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
       ],
     );
   }
@@ -334,11 +386,16 @@ class _LedgerScreenState extends State<LedgerScreen> {
     for (final tx in group.items) {
       final raw = tx.amount.replaceAll(RegExp(r'[^0-9]'), '');
       final val = int.tryParse(raw) ?? 0;
-      if (tx.isIncome) groupIncome += val; else groupExpense += val;
+      if (tx.isIncome) {
+        groupIncome += val;
+      } else {
+        groupExpense += val;
+      }
     }
     final total = groupExpense - groupIncome;
     final absStr = total.abs().toString().replaceAllMapped(
-      RegExp(r'(\d)(?=(\d{3})+(?!\d))'), (m) => '${m[1]},',
+      RegExp(r'(\d)(?=(\d{3})+(?!\d))'),
+      (m) => '${m[1]},',
     );
 
     return GestureDetector(
@@ -349,8 +406,12 @@ class _LedgerScreenState extends State<LedgerScreen> {
             group: group,
             allTransactions: _allTransactions,
             groupedIndexes: Set.from(_groupedIndexes),
-            onGroupDeleted: () async { await _fetchLedgerData(); },
-            onGroupUpdated: (_, __) async { await _fetchLedgerData(); },
+            onGroupDeleted: () async {
+              await _fetchLedgerData();
+            },
+            onGroupUpdated: (_, _) async {
+              await _fetchLedgerData();
+            },
           ),
         ),
       ),
@@ -369,20 +430,32 @@ class _LedgerScreenState extends State<LedgerScreen> {
         child: Row(
           children: [
             Container(
-              width: 42, height: 42,
-              decoration: BoxDecoration(color: colors.background, shape: BoxShape.circle),
+              width: 42,
+              height: 42,
+              decoration: BoxDecoration(
+                color: colors.background,
+                shape: BoxShape.circle,
+              ),
               child: Icon(Icons.group, color: colors.primaryText, size: 22),
             ),
             const SizedBox(width: 14),
             Expanded(
               child: Text(
                 group.name,
-                style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: colors.primaryText),
+                style: TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.bold,
+                  color: colors.primaryText,
+                ),
               ),
             ),
             Text(
               '-$absStr원',
-              style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Colors.red),
+              style: const TextStyle(
+                fontSize: 15,
+                fontWeight: FontWeight.bold,
+                color: Colors.red,
+              ),
             ),
             const SizedBox(width: 4),
             Icon(Icons.chevron_right, color: colors.subText, size: 18),
@@ -423,7 +496,11 @@ class _LedgerScreenState extends State<LedgerScreen> {
             onPressed: _fetchLedgerData,
           ),
           IconButton(
-            icon: Icon(Icons.notifications_none, color: colors.primaryText, size: 32),
+            icon: Icon(
+              Icons.notifications_none,
+              color: colors.primaryText,
+              size: 32,
+            ),
             onPressed: () => Navigator.push(
               context,
               MaterialPageRoute(builder: (_) => const NotificationScreen()),
@@ -435,7 +512,10 @@ class _LedgerScreenState extends State<LedgerScreen> {
         children: [
           // ── 달력 영역 ─────────────────────────────────────────────
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 10.0),
+            padding: const EdgeInsets.symmetric(
+              horizontal: 20.0,
+              vertical: 10.0,
+            ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -443,37 +523,60 @@ class _LedgerScreenState extends State<LedgerScreen> {
                   children: [
                     GestureDetector(
                       onTap: () => _changeMonth(-1),
-                      child: Icon(Icons.chevron_left, color: colors.primaryText),
+                      child: Icon(
+                        Icons.chevron_left,
+                        color: colors.primaryText,
+                      ),
                     ),
                     const SizedBox(width: 10),
                     Text(
                       '$currentMonth월',
-                      style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: colors.primaryText),
+                      style: TextStyle(
+                        fontSize: 22,
+                        fontWeight: FontWeight.bold,
+                        color: colors.primaryText,
+                      ),
                     ),
                     const SizedBox(width: 10),
                     GestureDetector(
                       onTap: () => _changeMonth(1),
-                      child: Icon(Icons.chevron_right, color: colors.primaryText),
+                      child: Icon(
+                        Icons.chevron_right,
+                        color: colors.primaryText,
+                      ),
                     ),
                   ],
                 ),
                 if (_overBudgetStartDay != null) ...[
                   const SizedBox(height: 8),
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 7,
+                    ),
                     decoration: BoxDecoration(
                       color: Colors.orange.withValues(alpha: 0.10),
                       borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: Colors.orange.withValues(alpha: 0.35)),
+                      border: Border.all(
+                        color: Colors.orange.withValues(alpha: 0.35),
+                      ),
                     ),
                     child: Row(
                       children: [
-                        Icon(Icons.warning_amber_rounded, size: 15, color: Colors.orange.shade800),
+                        Icon(
+                          Icons.warning_amber_rounded,
+                          size: 15,
+                          color: Colors.orange.shade800,
+                        ),
                         const SizedBox(width: 6),
                         Expanded(
                           child: Text(
                             '$_overBudgetStartDay일부터 예산 초과 예상 구간입니다',
-                            style: TextStyle(fontSize: 12, color: Colors.orange.shade800, fontWeight: FontWeight.w600),
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: Colors.orange.shade800,
+                              fontWeight: FontWeight.w600,
+                            ),
                           ),
                         ),
                       ],
@@ -484,10 +587,17 @@ class _LedgerScreenState extends State<LedgerScreen> {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.end,
                   children: [
-                    _buildLegend(color: expenseColor, label: '과소비일', isBorder: true),
+                    _buildLegend(
+                      color: expenseColor,
+                      label: '과소비일',
+                      isBorder: true,
+                    ),
                     const SizedBox(width: 10),
                     if (_budgetConfigured && _isCurrentMonth)
-                      _buildLegend(color: Colors.orange.shade700, label: '초과예상구간'),
+                      _buildLegend(
+                        color: Colors.orange.shade700,
+                        label: '초과예상구간',
+                      ),
                   ],
                 ),
                 const SizedBox(height: 20),
@@ -501,28 +611,33 @@ class _LedgerScreenState extends State<LedgerScreen> {
                   itemCount: totalDays,
                   itemBuilder: (context, index) {
                     final day = index + 1;
-                    final isSelected  = selectedDay == day;
-                    final isRisk      = _isRiskDay(day);
+                    final isSelected = selectedDay == day;
+                    final isRisk = _isRiskDay(day);
                     final isOverspent = _isOverspentDay(day);
-                    final hasTx       = _hasTransaction(day);
-                    final hasGroup    = _hasGroupOnDay(day);
-                    final dayData     = _calendarDays[day];
-                    final income      = (dayData?['income']  as num?)?.toInt() ?? 0;
-                    final expense     = (dayData?['expense'] as num?)?.toInt() ?? 0;
+                    final hasGroup = _hasGroupOnDay(day);
+                    final dayData = _calendarDays[day];
+                    final income = (dayData?['income'] as num?)?.toInt() ?? 0;
+                    final expense = (dayData?['expense'] as num?)?.toInt() ?? 0;
 
                     BoxDecoration circleDecoration;
                     Color numberColor;
                     FontWeight numberWeight = FontWeight.w500;
 
                     if (isSelected) {
-                      circleDecoration = BoxDecoration(color: colors.primaryText, shape: BoxShape.circle);
+                      circleDecoration = BoxDecoration(
+                        color: colors.primaryText,
+                        shape: BoxShape.circle,
+                      );
                       numberColor = colors.background;
                       numberWeight = FontWeight.bold;
                     } else if (isOverspent) {
                       circleDecoration = BoxDecoration(
                         color: expenseColor.withValues(alpha: 0.15),
                         shape: BoxShape.circle,
-                        border: Border.all(color: expenseColor.withValues(alpha: 0.6), width: 1.2),
+                        border: Border.all(
+                          color: expenseColor.withValues(alpha: 0.6),
+                          width: 1.2,
+                        ),
                       );
                       numberColor = expenseColor;
                       numberWeight = FontWeight.bold;
@@ -533,7 +648,9 @@ class _LedgerScreenState extends State<LedgerScreen> {
                       );
                       numberColor = Colors.orange.shade800;
                     } else {
-                      circleDecoration = const BoxDecoration(shape: BoxShape.circle);
+                      circleDecoration = const BoxDecoration(
+                        shape: BoxShape.circle,
+                      );
                       numberColor = colors.primaryText;
                     }
 
@@ -543,12 +660,17 @@ class _LedgerScreenState extends State<LedgerScreen> {
                         mainAxisAlignment: MainAxisAlignment.start,
                         children: [
                           Container(
-                            width: 28, height: 28,
+                            width: 28,
+                            height: 28,
                             decoration: circleDecoration,
                             child: Center(
                               child: Text(
                                 '$day',
-                                style: TextStyle(fontSize: 13, fontWeight: numberWeight, color: numberColor),
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: numberWeight,
+                                  color: numberColor,
+                                ),
                               ),
                             ),
                           ),
@@ -556,28 +678,41 @@ class _LedgerScreenState extends State<LedgerScreen> {
                           if (income > 0)
                             Text(
                               '+${_formatAmount(income)}',
-                              style: TextStyle(fontSize: 8, color: incomeColor, fontWeight: FontWeight.w600),
-                              overflow: TextOverflow.ellipsis, maxLines: 1,
+                              style: TextStyle(
+                                fontSize: 8,
+                                color: incomeColor,
+                                fontWeight: FontWeight.w600,
+                              ),
+                              overflow: TextOverflow.ellipsis,
+                              maxLines: 1,
                             ),
                           if (expense > 0)
                             Text(
                               '-${_formatAmount(expense)}',
                               style: TextStyle(
                                 fontSize: 8,
-                                color: isOverspent ? expenseColor : colors.subText,
-                                fontWeight: isOverspent ? FontWeight.bold : FontWeight.normal,
+                                color: isOverspent
+                                    ? expenseColor
+                                    : colors.subText,
+                                fontWeight: isOverspent
+                                    ? FontWeight.bold
+                                    : FontWeight.normal,
                               ),
-                              overflow: TextOverflow.ellipsis, maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              maxLines: 1,
                             ),
                           // 그룹 있는 날에 그룹 아이콘 점 표시
                           if (hasGroup && income == 0 && expense == 0)
                             Container(
-                              width: 4, height: 4,
+                              width: 4,
+                              height: 4,
                               margin: const EdgeInsets.only(top: 2),
                               decoration: BoxDecoration(
                                 color: isSelected
                                     ? colors.background
-                                    : colors.primaryText.withValues(alpha: 0.35),
+                                    : colors.primaryText.withValues(
+                                        alpha: 0.35,
+                                      ),
                                 shape: BoxShape.circle,
                               ),
                             ),
@@ -585,7 +720,9 @@ class _LedgerScreenState extends State<LedgerScreen> {
                             Icon(
                               Icons.group,
                               size: 7,
-                              color: isSelected ? colors.background : colors.subText,
+                              color: isSelected
+                                  ? colors.background
+                                  : colors.subText,
                             ),
                         ],
                       ),
@@ -601,15 +738,25 @@ class _LedgerScreenState extends State<LedgerScreen> {
           // ── 하단 내역 리스트 ─────────────────────────────────────
           Expanded(
             child: isLoading
-                ? Center(child: CircularProgressIndicator(color: colors.primaryText))
+                ? Center(
+                    child: CircularProgressIndicator(color: colors.primaryText),
+                  )
                 : errorMessage != null
                 ? Center(
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Icon(Icons.error_outline, color: colors.subText, size: 48),
+                        Icon(
+                          Icons.error_outline,
+                          color: colors.subText,
+                          size: 48,
+                        ),
                         const SizedBox(height: 12),
-                        Text(errorMessage!, style: TextStyle(color: colors.subText), textAlign: TextAlign.center),
+                        Text(
+                          errorMessage!,
+                          style: TextStyle(color: colors.subText),
+                          textAlign: TextAlign.center,
+                        ),
                         const SizedBox(height: 16),
                         ElevatedButton(
                           onPressed: _fetchLedgerData,
@@ -624,7 +771,10 @@ class _LedgerScreenState extends State<LedgerScreen> {
                   )
                 : (displayTx.isEmpty && displayGroups.isEmpty)
                 ? Center(
-                    child: Text('이번 달 내역이 없습니다.', style: TextStyle(color: colors.subText)),
+                    child: Text(
+                      '이번 달 내역이 없습니다.',
+                      style: TextStyle(color: colors.subText),
+                    ),
                   )
                 : _buildList(displayTx, displayGroups, colors),
           ),
@@ -642,17 +792,30 @@ class _LedgerScreenState extends State<LedgerScreen> {
     final List<Map<String, dynamic>> items = [];
 
     for (final tx in txList) {
-      items.add({'type': 'tx', 'data': tx, 'sortKey': tx['fullDate'] as DateTime, 'date': tx['date']});
+      items.add({
+        'type': 'tx',
+        'data': tx,
+        'sortKey': tx['fullDate'] as DateTime,
+        'date': tx['date'],
+      });
     }
     for (final group in groupList) {
       final date = group.bundleDate != null
           ? '${group.bundleDate!.toLocal().month}.${group.bundleDate!.toLocal().day}'
           : '';
-      final sortKey = group.bundleDate?.toLocal() ?? DateTime(currentYear, currentMonth, 1);
-      items.add({'type': 'group', 'data': group, 'sortKey': sortKey, 'date': date});
+      final sortKey =
+          group.bundleDate?.toLocal() ?? DateTime(currentYear, currentMonth, 1);
+      items.add({
+        'type': 'group',
+        'data': group,
+        'sortKey': sortKey,
+        'date': date,
+      });
     }
 
-    items.sort((a, b) => (b['sortKey'] as DateTime).compareTo(a['sortKey'] as DateTime));
+    items.sort(
+      (a, b) => (b['sortKey'] as DateTime).compareTo(a['sortKey'] as DateTime),
+    );
 
     String? lastDate;
     final widgets = <Widget>[];
@@ -665,7 +828,11 @@ class _LedgerScreenState extends State<LedgerScreen> {
             padding: const EdgeInsets.only(top: 10, bottom: 8),
             child: Text(
               date,
-              style: TextStyle(fontWeight: FontWeight.bold, color: colors.primaryText, fontSize: 14),
+              style: TextStyle(
+                fontWeight: FontWeight.bold,
+                color: colors.primaryText,
+                fontSize: 14,
+              ),
             ),
           ),
         );
@@ -691,19 +858,29 @@ class _LedgerScreenState extends State<LedgerScreen> {
                     ? colors.primaryText.withValues(alpha: 0.12)
                     : colors.cardBackground,
                 borderRadius: BorderRadius.circular(15),
-                border: isHighlighted ? Border.all(color: colors.primaryText, width: 1.5) : null,
+                border: isHighlighted
+                    ? Border.all(color: colors.primaryText, width: 1.5)
+                    : null,
               ),
               child: Row(
                 children: [
                   CircleAvatar(
                     backgroundColor: colors.background,
-                    child: Icon(tx['icon'] as IconData, color: colors.primaryText, size: 20),
+                    child: Icon(
+                      tx['icon'] as IconData,
+                      color: colors.primaryText,
+                      size: 20,
+                    ),
                   ),
                   const SizedBox(width: 15),
                   Expanded(
                     child: Text(
                       tx['title'] as String,
-                      style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: colors.primaryText),
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                        color: colors.primaryText,
+                      ),
                     ),
                   ),
                   Text(
@@ -711,7 +888,9 @@ class _LedgerScreenState extends State<LedgerScreen> {
                     style: TextStyle(
                       fontSize: 16,
                       fontWeight: FontWeight.bold,
-                      color: (tx['isIncome'] as bool) ? incomeColor : expenseColor,
+                      color: (tx['isIncome'] as bool)
+                          ? incomeColor
+                          : expenseColor,
                     ),
                   ),
                 ],
@@ -756,11 +935,26 @@ class LedgerScreenWrapper extends StatelessWidget {
           showSelectedLabels: false,
           showUnselectedLabels: false,
           items: const [
-            BottomNavigationBarItem(icon: Icon(Icons.settings_outlined, size: 30), label: '설정'),
-            BottomNavigationBarItem(icon: Icon(Icons.list_outlined, size: 30), label: '가계부'),
-            BottomNavigationBarItem(icon: Icon(Icons.home_outlined, size: 30), label: '홈'),
-            BottomNavigationBarItem(icon: Icon(Icons.pie_chart_outline, size: 30), label: '통계'),
-            BottomNavigationBarItem(icon: Icon(Icons.menu_book_outlined, size: 30), label: '마이페이지'),
+            BottomNavigationBarItem(
+              icon: Icon(Icons.settings_outlined, size: 30),
+              label: '설정',
+            ),
+            BottomNavigationBarItem(
+              icon: Icon(Icons.list_outlined, size: 30),
+              label: '가계부',
+            ),
+            BottomNavigationBarItem(
+              icon: Icon(Icons.home_outlined, size: 30),
+              label: '홈',
+            ),
+            BottomNavigationBarItem(
+              icon: Icon(Icons.pie_chart_outline, size: 30),
+              label: '통계',
+            ),
+            BottomNavigationBarItem(
+              icon: Icon(Icons.menu_book_outlined, size: 30),
+              label: '마이페이지',
+            ),
           ],
         ),
       ),

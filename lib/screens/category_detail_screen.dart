@@ -114,7 +114,7 @@ class CategoryDetailScreen extends StatelessWidget {
                       ),
                       const SizedBox(height: 6),
                       Text(
-                        '횟수 ${itemCount}회',
+                        '횟수 $itemCount회',
                         style: TextStyle(fontSize: 14, color: colors.subText),
                       ),
                     ],
