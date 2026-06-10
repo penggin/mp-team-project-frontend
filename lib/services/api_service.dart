@@ -777,6 +777,29 @@ class ApiService {
     return null;
   }
 
+  // 가계부 항목 수정 (카테고리 변경 등)
+  static Future<bool> updateLedgerEntry(
+    String entryId, {
+    String? category,
+  }) async {
+    try {
+      final body = _withoutNullValues({
+        if (category != null) 'category': CategoryMapper.toApi(category),
+      });
+      if (body.isEmpty) return false;
+      final data = await request(
+        'PATCH',
+        '/api/v1/ledger/$entryId',
+        body: body,
+      );
+      print('가계부 항목 수정($entryId) 응답: $data');
+      return _isSuccessfulResponse(data);
+    } catch (e) {
+      print('가계부 항목 수정 에러: $e');
+      return false;
+    }
+  }
+
   static Future<bool> createManualLedgerEntry({
     required int amount,
     required String type,

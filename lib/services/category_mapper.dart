@@ -41,6 +41,9 @@ class CategoryMapper {
     PaymentCategoryOption(value: 'shopping', label: '쇼핑'),
     PaymentCategoryOption(value: 'transport', label: '교통'),
     PaymentCategoryOption(value: 'telecommunications', label: '통신'),
+    PaymentCategoryOption(value: 'education', label: '학업'),
+    PaymentCategoryOption(value: 'transfer_in', label: '입금'),
+    PaymentCategoryOption(value: 'transfer_out', label: '출금'),
     PaymentCategoryOption(value: othersApi, label: othersDisplay),
   ];
 
@@ -50,6 +53,9 @@ class CategoryMapper {
     'shopping',
     'transport',
     'telecommunications',
+    'education',
+    'transfer_in',
+    'transfer_out',
     othersApi,
   ];
 
@@ -66,6 +72,9 @@ class CategoryMapper {
     'shopping': '쇼핑',
     'transport': '교통',
     'telecommunications': '통신',
+    'education': '학업',
+    'transfer_in': '입금',
+    'transfer_out': '출금',
     othersApi: othersDisplay,
   };
 
@@ -83,6 +92,10 @@ class CategoryMapper {
     '교통': 'transport',
     '교통비': 'transport',
     '통신': 'telecommunications',
+    '학업': 'education',
+    '교육': 'education',
+    '입금': 'transfer_in',
+    '출금': 'transfer_out',
     othersDisplay: othersApi,
     '기타 결제': othersApi,
     '미분류': othersApi,

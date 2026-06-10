@@ -514,7 +514,7 @@ class _LedgerScreenState extends State<LedgerScreen> {
           Padding(
             padding: const EdgeInsets.symmetric(
               horizontal: 20.0,
-              vertical: 10.0,
+              vertical: 5.0,
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,

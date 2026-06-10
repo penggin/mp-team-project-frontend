@@ -24,6 +24,9 @@ class _CategorySelectScreenState extends State<CategorySelectScreen> {
     'shopping': Color(0xFFFFE599),
     'transport': Color(0xFFB3FFFF),
     'telecommunications': Color(0xFFB3D9FF),
+    'education': Color(0xFFB3FFD9),
+    'transfer_in': Color(0xFFA5D6A7),
+    'transfer_out': Color(0xFFFFAB91),
     'others': Color(0xFFD9B3FF),
   };
 
@@ -131,7 +134,6 @@ class _CategorySelectScreenState extends State<CategorySelectScreen> {
                     child: ElevatedButton(
                       onPressed: () {
                         Navigator.pop(context);
-
                         Navigator.pop(this.context, {
                           'category': categoryName,
                           'applyToAll': applyToAll,
@@ -162,7 +164,6 @@ class _CategorySelectScreenState extends State<CategorySelectScreen> {
                       setState(() {
                         _selectedCategory = widget.currentCategory;
                       });
-
                       Navigator.pop(context);
                     },
                     child: Text('취소', style: TextStyle(color: colors.subText)),
@@ -210,8 +211,7 @@ class _CategorySelectScreenState extends State<CategorySelectScreen> {
             Expanded(
               child: ListView.separated(
                 itemCount: categories.length,
-                separatorBuilder: (context, index) =>
-                    const SizedBox(height: 10),
+                separatorBuilder: (_, __) => const SizedBox(height: 10),
                 itemBuilder: (context, index) {
                   final item = categories[index];
                   final isSelected = _selectedCategory == item.label;
@@ -231,15 +231,12 @@ class _CategorySelectScreenState extends State<CategorySelectScreen> {
                             width: 32,
                             height: 32,
                             decoration: BoxDecoration(
-                              color:
-                                  _categoryColors[item.value] ??
+                              color: _categoryColors[item.value] ??
                                   const Color(0xFFBDBDBD),
                               shape: BoxShape.circle,
                             ),
                           ),
-
                           const SizedBox(width: 14),
-
                           Expanded(
                             child: Text(
                               item.label,
@@ -250,7 +247,6 @@ class _CategorySelectScreenState extends State<CategorySelectScreen> {
                               ),
                             ),
                           ),
-
                           Icon(
                             isSelected
                                 ? Icons.check_circle

@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../app_colors.dart';
+import '../services/api_service.dart';
+import '../services/category_mapper.dart';
 import 'category_select_screen.dart';
 
 // ✅ TransactionItem 클래스
@@ -11,9 +13,9 @@ class TransactionItem {
   final bool isIncome;
   final String category;
   final IconData icon;
-  final DateTime? createdAt; // 날짜 정렬용
-  final String? id; // 백엔드 ledger ID (그룹화 PATCH 용)
-  final String? bundleId; // 백엔드 bundle_id (그룹 소속 표시)
+  final DateTime? createdAt;
+  final String? id;
+  final String? bundleId;
 
   const TransactionItem({
     required this.date,
@@ -54,6 +56,7 @@ class IndividualPaymentScreen extends StatefulWidget {
 
 class _IndividualPaymentScreenState extends State<IndividualPaymentScreen> {
   bool _includeInTotal = true;
+  bool _isSaving = false;
 
   late String _selectedCategory;
 
@@ -61,6 +64,68 @@ class _IndividualPaymentScreenState extends State<IndividualPaymentScreen> {
   void initState() {
     super.initState();
     _selectedCategory = widget.transaction.category;
+  }
+
+  // ══════════════════════════════
+  // 카테고리 변경 + API 호출
+  // ══════════════════════════════
+  Future<void> _onCategoryChanged(String newCategory, bool applyToAll) async {
+    final prevCategory = _selectedCategory;
+
+    setState(() {
+      _selectedCategory = newCategory;
+      _isSaving = true;
+    });
+
+    try {
+      final entryId = widget.transaction.id;
+      if (entryId == null) {
+        // id 없으면 화면 반영만
+        setState(() => _isSaving = false);
+        return;
+      }
+
+      bool success;
+
+      if (applyToAll) {
+        // 동일 가게명 전체 변경: 목록 조회 후 병렬 PATCH
+        final allEntries = await ApiService.getLedgerEntries();
+        final sameTitle = (allEntries ?? [])
+            .where((e) => e['description'] == widget.transaction.title)
+            .toList();
+
+        final results = await Future.wait(
+          sameTitle.map((e) => ApiService.updateLedgerEntry(
+                e['id'].toString(),
+                category: newCategory,
+              )),
+        );
+        success = results.every((r) => r == true);
+      } else {
+        // 단건 변경
+        success = await ApiService.updateLedgerEntry(
+          entryId,
+          category: newCategory,
+        );
+      }
+
+      if (!success && mounted) {
+        // 실패 시 원복
+        setState(() => _selectedCategory = prevCategory);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('카테고리 변경에 실패했습니다. 다시 시도해주세요.')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _selectedCategory = prevCategory);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('카테고리 변경 중 오류가 발생했습니다.')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isSaving = false);
+    }
   }
 
   @override
@@ -110,7 +175,6 @@ class _IndividualPaymentScreenState extends State<IndividualPaymentScreen> {
                   ),
                   const SizedBox(width: 14),
                   Text(
-                    // ✅ title에서 가게명만 짧게 표시 (ex. '메가커피')
                     widget.transaction.title.split(' ').first,
                     style: TextStyle(
                       fontSize: 22,
@@ -141,47 +205,41 @@ class _IndividualPaymentScreenState extends State<IndividualPaymentScreen> {
               const SizedBox(height: 8),
 
               // ══════════════════════════════
-              // 3. 상세 정보 그룹 1 (주문금액, 카테고리, 메모, 지출합계포함)
+              // 3. 상세 정보
               // ══════════════════════════════
               _buildSimpleRow('주문금액', widget.transaction.amount, colors),
               _buildDivider(colors),
 
-              // 카테고리 (> 화살표 포함)
-              // 카테고리 (> 화살표 포함)
+              // 카테고리 (> 화살표 + API 연동)
               _buildArrowRow(
                 '카테고리 설정',
                 _selectedCategory,
                 colors,
-                onTap: () async {
-                  final result = await Navigator.push<Map<String, dynamic>>(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) => CategorySelectScreen(
-                        currentCategory: _selectedCategory,
-                        showChangeDialog: true,
-                      ),
-                    ),
-                  );
+                onTap: _isSaving
+                    ? null
+                    : () async {
+                        final result =
+                            await Navigator.push<Map<String, dynamic>>(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => CategorySelectScreen(
+                              currentCategory: _selectedCategory,
+                              showChangeDialog: true,
+                            ),
+                          ),
+                        );
 
-                  if (result != null) {
-                    setState(() {
-                      _selectedCategory = result['category'] as String;
-                    });
-
-                    final bool applyToAll =
-                        result['applyToAll'] as bool? ?? false;
-
-                    if (applyToAll) {
-                      // TODO:
-                      // 동일 결제 이력 전체 카테고리 변경
-                    }
-                  }
-                },
+                        if (result != null && mounted) {
+                          final newCategory = result['category'] as String;
+                          final applyToAll =
+                              result['applyToAll'] as bool? ?? false;
+                          await _onCategoryChanged(newCategory, applyToAll);
+                        }
+                      },
               ),
-
               _buildDivider(colors),
 
-              // 메모 (핑크색 텍스트 + > 화살표)
+              // 메모
               _buildMemoRow(colors),
               _buildDivider(colors),
 
@@ -196,7 +254,7 @@ class _IndividualPaymentScreenState extends State<IndividualPaymentScreen> {
               const SizedBox(height: 12),
 
               // ══════════════════════════════
-              // 4. 상세 정보 그룹 2 (결제수단, 결제일시, 사용처)
+              // 4. 결제 정보
               // ══════════════════════════════
               _buildSimpleRow('결제수단', 'NH 카드', colors),
               _buildDivider(colors),
@@ -220,17 +278,14 @@ class _IndividualPaymentScreenState extends State<IndividualPaymentScreen> {
   // 헬퍼 위젯들
   // ══════════════════════════════
 
-  // 일반 텍스트 행
   Widget _buildSimpleRow(String label, String value, ThemeColors colors) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 14),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(
-            label,
-            style: TextStyle(fontSize: 15, color: colors.primaryText),
-          ),
+          Text(label,
+              style: TextStyle(fontSize: 15, color: colors.primaryText)),
           Text(
             value,
             style: TextStyle(
@@ -244,7 +299,6 @@ class _IndividualPaymentScreenState extends State<IndividualPaymentScreen> {
     );
   }
 
-  // 화살표(>) 있는 행 (카테고리)
   Widget _buildArrowRow(
     String label,
     String value,
@@ -258,20 +312,28 @@ class _IndividualPaymentScreenState extends State<IndividualPaymentScreen> {
         child: Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Text(
-              label,
-              style: TextStyle(fontSize: 15, color: colors.primaryText),
-            ),
+            Text(label,
+                style: TextStyle(fontSize: 15, color: colors.primaryText)),
             Row(
               children: [
-                Text(
-                  value,
-                  style: TextStyle(
-                    fontSize: 15,
-                    color: colors.primaryText,
-                    fontWeight: FontWeight.w500,
+                if (_isSaving)
+                  SizedBox(
+                    width: 14,
+                    height: 14,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 1.5,
+                      color: colors.subText,
+                    ),
+                  )
+                else
+                  Text(
+                    value,
+                    style: TextStyle(
+                      fontSize: 15,
+                      color: colors.primaryText,
+                      fontWeight: FontWeight.w500,
+                    ),
                   ),
-                ),
                 const SizedBox(width: 4),
                 Icon(Icons.chevron_right, size: 18, color: colors.primaryText),
               ],
@@ -282,7 +344,6 @@ class _IndividualPaymentScreenState extends State<IndividualPaymentScreen> {
     );
   }
 
-  // 메모 행 (accent 색상 텍스트 + > 화살표)
   Widget _buildMemoRow(ThemeColors colors) {
     return GestureDetector(
       onTap: () {
@@ -293,17 +354,15 @@ class _IndividualPaymentScreenState extends State<IndividualPaymentScreen> {
         child: Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Text(
-              '메모',
-              style: TextStyle(fontSize: 15, color: colors.primaryText),
-            ),
+            Text('메모',
+                style: TextStyle(fontSize: 15, color: colors.primaryText)),
             Row(
               children: [
                 Text(
                   '메모를 남겨보세요',
                   style: TextStyle(
                     fontSize: 15,
-                    color: colors.accent, // ✅ 테마 accent 색상
+                    color: colors.accent,
                     fontWeight: FontWeight.w500,
                   ),
                 ),
@@ -317,37 +376,27 @@ class _IndividualPaymentScreenState extends State<IndividualPaymentScreen> {
     );
   }
 
-  // 지출 합계에 포함 스위치 행
   Widget _buildSwitchRow(ThemeColors colors) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 6),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(
-            '지출 합계에 포함',
-            style: TextStyle(fontSize: 15, color: colors.primaryText),
-          ),
-          // ✅ 스위치 색상 테마 적용
+          Text('지출 합계에 포함',
+              style: TextStyle(fontSize: 15, color: colors.primaryText)),
           Switch(
             value: _includeInTotal,
-            onChanged: (value) {
-              setState(() {
-                _includeInTotal = value;
-              });
-            },
+            onChanged: (value) => setState(() => _includeInTotal = value),
             activeThumbColor: Colors.white,
-            activeTrackColor: colors.accent, // ✅ 켜졌을 때 트랙: accent 색상
+            activeTrackColor: colors.accent,
             inactiveThumbColor: Colors.white,
-            inactiveTrackColor:
-                colors.cardBackground, // ✅ 꺼졌을 때 트랙: cardBackground
+            inactiveTrackColor: colors.cardBackground,
           ),
         ],
       ),
     );
   }
 
-  // 구분선
   Widget _buildDivider(ThemeColors colors) {
     return Divider(
       color: colors.primaryText.withValues(alpha: 0.08),
