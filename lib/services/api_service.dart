@@ -638,11 +638,7 @@ class ApiService {
       final data = await request(
         'PUT',
         '/api/v1/budgets/monthly',
-        body: {
-          'year': year,
-          'month': month,
-          'monthly_limit': monthlyLimit,
-        },
+        body: {'year': year, 'month': month, 'monthly_limit': monthlyLimit},
       );
       if (_isSuccessfulResponse(data)) {
         final budget = data?['data'];
@@ -739,11 +735,13 @@ class ApiService {
   static Future<Map<String, dynamic>?> updatePetInfo({
     String? name,
     String? species,
+    bool resetProgress = false,
   }) async {
     try {
       final payload = _withoutNullValues({
         'name': _nonEmptyString(name),
         'species': _nonEmptyString(species),
+        'reset_progress': resetProgress ? true : null,
       });
       if (payload.isEmpty) return getPetState();
 

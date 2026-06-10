@@ -52,6 +52,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       if (mounted) setState(() => _monthlyBudget = localBudget);
     }
   }
+
   Future<void> _loadUserProfile() async {
     final profile = await ApiService.getCurrentUser();
     if (!mounted) return;
@@ -197,7 +198,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
               Navigator.pushReplacement(
                 context,
                 MaterialPageRoute(
-                  builder: (context) => const CharacterSelectScreen(),
+                  builder: (context) =>
+                      const CharacterSelectScreen(resetProgressOnSelect: true),
                 ),
               );
             },

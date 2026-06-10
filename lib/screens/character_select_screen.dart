@@ -6,7 +6,9 @@ import '../services/api_service.dart';
 import 'main_screen.dart';
 
 class CharacterSelectScreen extends StatefulWidget {
-  const CharacterSelectScreen({super.key});
+  final bool resetProgressOnSelect;
+
+  const CharacterSelectScreen({super.key, this.resetProgressOnSelect = false});
 
   @override
   State<CharacterSelectScreen> createState() => _CharacterSelectScreenState();
@@ -44,7 +46,10 @@ class _CharacterSelectScreenState extends State<CharacterSelectScreen> {
 
     setState(() => _isLoading = true);
 
-    await ApiService.updatePetInfo(species: character.species);
+    await ApiService.updatePetInfo(
+      species: character.species,
+      resetProgress: widget.resetProgressOnSelect,
+    );
 
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove('is_first_login');

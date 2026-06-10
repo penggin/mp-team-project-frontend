@@ -606,6 +606,43 @@ void main() {
     expect(pet?['species'], 'dolphin');
   });
 
+  test('updatePetInfo can request progress reset', () async {
+    SharedPreferences.setMockInitialValues({'access_token': 'access-token'});
+
+    ApiService.setHttpClientForTest(
+      MockClient((request) async {
+        expect(request.method, 'PATCH');
+        expect(request.url.path, '/api/v1/pet');
+        expect(jsonDecode(request.body), {
+          'species': 'horse',
+          'reset_progress': true,
+        });
+        return jsonResponse({
+          'success': true,
+          'data': {
+            'id': 'pet-1',
+            'user_id': 'user-1',
+            'name': '고래',
+            'species': 'horse',
+            'level': 1,
+            'exp': 0,
+            'mood': 'normal',
+            'interaction_exp_bonus': 0,
+          },
+        }, 200);
+      }),
+    );
+
+    final pet = await ApiService.updatePetInfo(
+      species: 'horse',
+      resetProgress: true,
+    );
+
+    expect(pet?['species'], 'horse');
+    expect(pet?['level'], 1);
+    expect(pet?['exp'], 0);
+  });
+
   test('createManualLedgerEntry posts the backend ledger contract', () async {
     SharedPreferences.setMockInitialValues({'access_token': 'access-token'});
     final transactionAt = DateTime.utc(2026, 5, 27, 10);
