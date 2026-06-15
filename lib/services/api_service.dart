@@ -777,14 +777,16 @@ class ApiService {
     return null;
   }
 
-  // 가계부 항목 수정 (카테고리 변경 등)
+  // 가계부 항목 수정 (카테고리 변경, 가게명 변경 등)
   static Future<bool> updateLedgerEntry(
     String entryId, {
     String? category,
+    String? merchantName,
   }) async {
     try {
       final body = _withoutNullValues({
         if (category != null) 'category': CategoryMapper.toApi(category),
+        if (merchantName != null) 'merchant_name': merchantName,
       });
       if (body.isEmpty) return false;
       final data = await request(

@@ -2,15 +2,14 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../app_colors.dart';
+import '../services/api_service.dart';
 import 'individual_payment_screen.dart';
 import 'main_payment_screen.dart';
 import 'group_payment_screen.dart';
 
-class CategoryDetailScreen extends StatelessWidget {
+class CategoryDetailScreen extends StatefulWidget {
   final String category;
   final List<TransactionItem> transactions;
-
-  // 기타(그룹) 카테고리용 — 일반 카테고리일 때는 빈 리스트
   final List<TransactionGroup> groups;
 
   const CategoryDetailScreen({
@@ -20,14 +19,27 @@ class CategoryDetailScreen extends StatelessWidget {
     this.groups = const [],
   });
 
+  @override
+  State<CategoryDetailScreen> createState() => _CategoryDetailScreenState();
+}
+
+class _CategoryDetailScreenState extends State<CategoryDetailScreen> {
+  late List<TransactionGroup> _groups;
+
+  @override
+  void initState() {
+    super.initState();
+    _groups = List.from(widget.groups);
+  }
+
   // 일반 거래 합계 + 그룹 내 지출 합계
   int get totalAmount {
     int total = 0;
-    for (final tx in transactions) {
+    for (final tx in widget.transactions) {
       final raw = tx.amount.replaceAll(RegExp(r'[^0-9]'), '');
       total += int.tryParse(raw) ?? 0;
     }
-    for (final group in groups) {
+    for (final group in _groups) {
       int groupExpense = 0;
       int groupIncome = 0;
       for (final tx in group.items) {
@@ -54,7 +66,7 @@ class CategoryDetailScreen extends StatelessWidget {
   }
 
   // 총 항목 수 (일반 거래 + 그룹 수)
-  int get itemCount => transactions.length + groups.length;
+  int get itemCount => widget.transactions.length + _groups.length;
 
   @override
   Widget build(BuildContext context) {
@@ -78,7 +90,8 @@ class CategoryDetailScreen extends StatelessWidget {
         ),
       ),
       body: ListView(
-        padding: const EdgeInsets.symmetric(horizontal: 20),
+        padding: const EdgeInsets.fromLTRB(20, 0, 20, 80),
+        physics: const BouncingScrollPhysics(),
         children: [
           const SizedBox(height: 8),
 
@@ -96,7 +109,7 @@ class CategoryDetailScreen extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        category,
+                        widget.category,
                         style: TextStyle(
                           fontSize: 20,
                           fontWeight: FontWeight.bold,
@@ -131,7 +144,7 @@ class CategoryDetailScreen extends StatelessWidget {
           const SizedBox(height: 20),
 
           // 그룹 카드 목록 (기타 카테고리)
-          if (groups.isNotEmpty) ..._buildGroupList(context, colors),
+          if (_groups.isNotEmpty) ..._buildGroupList(context, colors),
 
           // 일반 거래 목록
           ..._buildTransactionList(context, colors),
@@ -144,7 +157,7 @@ class CategoryDetailScreen extends StatelessWidget {
   List<Widget> _buildGroupList(BuildContext context, ThemeColors colors) {
     final widgets = <Widget>[];
 
-    if (groups.isNotEmpty) {
+    if (_groups.isNotEmpty) {
       widgets.add(
         Padding(
           padding: const EdgeInsets.only(bottom: 8),
@@ -159,7 +172,8 @@ class CategoryDetailScreen extends StatelessWidget {
       );
     }
 
-    for (final group in groups) {
+    for (int gi = 0; gi < _groups.length; gi++) {
+      final group = _groups[gi];
       // 그룹 내 지출 - 수입 = 내 지출
       int groupExpense = 0;
       int groupIncome = 0;
@@ -190,7 +204,30 @@ class CategoryDetailScreen extends StatelessWidget {
                   groupedIndexes: {},
                 ),
               ),
-            );
+            ).then((_) async {
+              // GroupPaymentScreen에서 이름 변경 후 복귀 시 백엔드에서 최신 번들 목록을 다시 가져와 이름 갱신
+              final bundles = await ApiService.getLedgerBundles();
+              if (!mounted) return;
+              final updatedGroups = List<TransactionGroup>.from(_groups);
+              for (int i = 0; i < updatedGroups.length; i++) {
+                final bid = updatedGroups[i].bundleId;
+                if (bid == null) continue;
+                final meta = bundles.firstWhere(
+                  (b) => b['id']?.toString() == bid,
+                  orElse: () => {},
+                );
+                final newName = meta['name']?.toString();
+                if (newName != null && newName.isNotEmpty && newName != updatedGroups[i].name) {
+                  updatedGroups[i] = TransactionGroup(
+                    name: newName,
+                    items: updatedGroups[i].items,
+                    bundleId: updatedGroups[i].bundleId,
+                    bundleDate: updatedGroups[i].bundleDate,
+                  );
+                }
+              }
+              setState(() => _groups = updatedGroups);
+            });
           },
           child: Container(
             margin: const EdgeInsets.only(bottom: 12),
@@ -244,11 +281,11 @@ class CategoryDetailScreen extends StatelessWidget {
   // 일반 거래 목록
   List<Widget> _buildTransactionList(BuildContext context, ThemeColors colors) {
     final widgets = <Widget>[];
-    if (transactions.isEmpty) return widgets;
+    if (widget.transactions.isEmpty) return widgets;
 
     String? lastDate;
 
-    for (final tx in transactions) {
+    for (final tx in widget.transactions) {
       if (tx.date != lastDate) {
         widgets.add(
           Padding(

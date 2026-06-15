@@ -104,7 +104,7 @@ class _EvolutionScreenState extends State<EvolutionScreen> {
           ),
 
           Positioned(
-            bottom: 40,
+            bottom: 50,
             right: 24,
             child: Text(
               '탭하여 건너뛰기',

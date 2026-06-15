@@ -1187,7 +1187,7 @@ class _MainPaymentScreenState extends State<MainPaymentScreen>
               },
             ),
           ),
-        );
+        ).then((_) => _loadTransactions());
       },
       child: Container(
         margin: const EdgeInsets.only(bottom: 10),

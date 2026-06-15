@@ -57,13 +57,67 @@ class IndividualPaymentScreen extends StatefulWidget {
 class _IndividualPaymentScreenState extends State<IndividualPaymentScreen> {
   bool _includeInTotal = true;
   bool _isSaving = false;
+  bool _isEditingTitle = false;
 
   late String _selectedCategory;
+  late String _currentTitle;
+  final TextEditingController _titleController = TextEditingController();
 
   @override
   void initState() {
     super.initState();
     _selectedCategory = widget.transaction.category;
+    _currentTitle = widget.transaction.title;
+    _titleController.text = _currentTitle;
+  }
+
+  @override
+  void dispose() {
+    _titleController.dispose();
+    super.dispose();
+  }
+
+  // ══════════════════════════════
+  // 가게명 변경 + API 호출
+  // ══════════════════════════════
+  Future<void> _onTitleSubmitted(String newTitle) async {
+    final trimmed = newTitle.trim();
+    if (trimmed.isEmpty || trimmed == _currentTitle) {
+      setState(() => _isEditingTitle = false);
+      return;
+    }
+    final prevTitle = _currentTitle;
+    setState(() {
+      _currentTitle = trimmed;
+      _isEditingTitle = false;
+      _isSaving = true;
+    });
+    try {
+      final entryId = widget.transaction.id;
+      if (entryId == null) {
+        setState(() => _isSaving = false);
+        return;
+      }
+      final ok = await ApiService.updateLedgerEntry(
+        entryId,
+        merchantName: trimmed,
+      );
+      if (!ok && mounted) {
+        setState(() => _currentTitle = prevTitle);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('가게명 변경에 실패했습니다')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _currentTitle = prevTitle);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('가게명 변경 중 오류가 발생했습니다')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isSaving = false);
+    }
   }
 
   // ══════════════════════════════
@@ -174,12 +228,53 @@ class _IndividualPaymentScreenState extends State<IndividualPaymentScreen> {
                     ),
                   ),
                   const SizedBox(width: 14),
-                  Text(
-                    widget.transaction.title.split(' ').first,
-                    style: TextStyle(
-                      fontSize: 22,
-                      fontWeight: FontWeight.bold,
-                      color: colors.primaryText,
+                  Expanded(
+                    child: GestureDetector(
+                      onTap: _isSaving
+                          ? null
+                          : () {
+                              setState(() => _isEditingTitle = true);
+                              Future.delayed(const Duration(milliseconds: 50), () {
+                                _titleController.selection = TextSelection.fromPosition(
+                                  TextPosition(offset: _titleController.text.length),
+                                );
+                              });
+                            },
+                      child: _isEditingTitle
+                          ? TextField(
+                              controller: _titleController,
+                              autofocus: true,
+                              style: TextStyle(
+                                fontSize: 22,
+                                fontWeight: FontWeight.bold,
+                                color: colors.primaryText,
+                              ),
+                              decoration: InputDecoration(
+                                border: InputBorder.none,
+                                isDense: true,
+                                contentPadding: EdgeInsets.zero,
+                                hintText: '가게명 입력',
+                                hintStyle: TextStyle(color: colors.subText),
+                              ),
+                              onSubmitted: _onTitleSubmitted,
+                              onTapOutside: (_) => _onTitleSubmitted(_titleController.text),
+                            )
+                          : Row(
+                              children: [
+                                Flexible(
+                                  child: Text(
+                                    _currentTitle,
+                                    style: TextStyle(
+                                      fontSize: 22,
+                                      fontWeight: FontWeight.bold,
+                                      color: colors.primaryText,
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 6),
+                                Icon(Icons.edit_outlined, size: 16, color: colors.subText),
+                              ],
+                            ),
                     ),
                   ),
                 ],

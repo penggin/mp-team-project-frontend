@@ -533,10 +533,25 @@ class _GroupPaymentScreenState extends State<GroupPaymentScreen>
                                         isDense: true,
                                         contentPadding: EdgeInsets.zero,
                                       ),
-                                      onSubmitted: (v) => setState(() {
-                                        _groupName = v.isEmpty ? _groupName : v;
-                                        _isEditingName = false;
-                                      }),
+                                      onSubmitted: (v) async {
+                                        final newName = v.trim().isEmpty ? _groupName : v.trim();
+                                        setState(() {
+                                          _groupName = newName;
+                                          _isEditingName = false;
+                                        });
+                                        final bundleId = widget.group.bundleId;
+                                        if (bundleId != null) {
+                                          final ok = await ApiService.updateLedgerBundle(
+                                            bundleId: bundleId,
+                                            name: newName,
+                                          );
+                                          if (!ok && mounted) {
+                                            ScaffoldMessenger.of(context).showSnackBar(
+                                              const SnackBar(content: Text('그룹 이름 저장에 실패했습니다')),
+                                            );
+                                          }
+                                        }
+                                      },
                                     )
                                   : Text(
                                       _groupName,

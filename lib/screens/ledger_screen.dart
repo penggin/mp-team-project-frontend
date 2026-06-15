@@ -514,7 +514,7 @@ class _LedgerScreenState extends State<LedgerScreen> {
           Padding(
             padding: const EdgeInsets.symmetric(
               horizontal: 20.0,
-              vertical: 5.0,
+              vertical: 2.0,
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -583,7 +583,7 @@ class _LedgerScreenState extends State<LedgerScreen> {
                     ),
                   ),
                 ],
-                const SizedBox(height: 8),
+                const SizedBox(height: 4),
                 Row(
                   mainAxisAlignment: MainAxisAlignment.end,
                   children: [
@@ -600,13 +600,13 @@ class _LedgerScreenState extends State<LedgerScreen> {
                       ),
                   ],
                 ),
-                const SizedBox(height: 20),
+                const SizedBox(height: 6),
                 GridView.builder(
                   shrinkWrap: true,
                   physics: const NeverScrollableScrollPhysics(),
                   gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
                     crossAxisCount: 7,
-                    childAspectRatio: 0.60,
+                    childAspectRatio: 0.75,
                   ),
                   itemCount: totalDays,
                   itemBuilder: (context, index) {
