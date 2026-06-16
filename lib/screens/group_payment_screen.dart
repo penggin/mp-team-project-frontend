@@ -709,7 +709,7 @@ class _GroupPaymentScreenState extends State<GroupPaymentScreen>
             // ── 내역 추가 모드: 하단 확인 버튼 ──
             if (_isAddMode)
               Positioned(
-                bottom: 24,
+                bottom: MediaQuery.of(context).padding.bottom + 16,
                 left: 20,
                 right: 20,
                 child: AnimatedOpacity(
@@ -743,7 +743,7 @@ class _GroupPaymentScreenState extends State<GroupPaymentScreen>
             // ── 내역 수정 플로팅 메뉴 ──
             if (!_isAddMode && !_isRemoveMode)
               Positioned(
-                bottom: 24,
+                bottom: MediaQuery.of(context).padding.bottom + 16,
                 left: 20,
                 right: 20,
                 child: Column(

@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../app_colors.dart';
 import '../services/api_service.dart';
-import '../services/category_mapper.dart';
 import 'category_select_screen.dart';
 
 // ✅ TransactionItem 클래스
@@ -144,7 +143,7 @@ class _IndividualPaymentScreenState extends State<IndividualPaymentScreen> {
       if (applyToAll) {
         // 동일 가게명 전체 변경: 목록 조회 후 병렬 PATCH
         final allEntries = await ApiService.getLedgerEntries();
-        final sameTitle = (allEntries ?? [])
+        final sameTitle = allEntries
             .where((e) => e['description'] == widget.transaction.title)
             .toList();
 

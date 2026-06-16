@@ -130,7 +130,9 @@ class PaymentTaskHandler extends TaskHandler {
       debugPrint('백그라운드 결제 처리 알림 전송 실패: $e');
     }
 
-    // UI 측에 갱신 신호 전송
-    _sendDataToMain({'action': 'refresh'});
+    // UI 측에 갱신 신호 전송 (결제 금액 포함)
+    final amount = result.parsed?['normalized_transaction']?['amount'];
+    final parsedAmount = amount is int ? amount : int.tryParse('$amount') ?? 0;
+    _sendDataToMain({'action': 'refresh', 'amount': parsedAmount});
   }
 }

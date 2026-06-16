@@ -134,154 +134,166 @@ class _AddPaymentScreenState extends State<AddPaymentScreen> {
           ),
         ),
       ),
-      body: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 18),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const SizedBox(height: 20),
-
-            // 스위치
-            Container(
-              height: 60,
-              decoration: BoxDecoration(
-                color: colors.cardBackground,
-                borderRadius: BorderRadius.circular(30),
-              ),
-              child: Row(
+      body: Column(
+        children: [
+          Expanded(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.symmetric(horizontal: 18),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Expanded(
-                    child: GestureDetector(
-                      onTap: () {
-                        setState(() {
-                          isIncome = false;
-                        });
-                      },
-                      child: Container(
-                        margin: const EdgeInsets.all(4),
-                        decoration: BoxDecoration(
-                          color: !isIncome ? Colors.white : Colors.transparent,
-                          borderRadius: BorderRadius.circular(30),
-                        ),
-                        child: Center(
-                          child: Text(
-                            '지출',
-                            style: TextStyle(
-                              color: colors.primaryText,
-                              fontWeight: FontWeight.bold,
+                  const SizedBox(height: 20),
+
+                  // 스위치
+                  Container(
+                    height: 60,
+                    decoration: BoxDecoration(
+                      color: colors.cardBackground,
+                      borderRadius: BorderRadius.circular(30),
+                    ),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: GestureDetector(
+                            onTap: () {
+                              setState(() {
+                                isIncome = false;
+                              });
+                            },
+                            child: Container(
+                              margin: const EdgeInsets.all(4),
+                              decoration: BoxDecoration(
+                                color: !isIncome ? Colors.white : Colors.transparent,
+                                borderRadius: BorderRadius.circular(30),
+                              ),
+                              child: Center(
+                                child: Text(
+                                  '지출',
+                                  style: TextStyle(
+                                    color: colors.primaryText,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ),
                             ),
                           ),
                         ),
-                      ),
-                    ),
-                  ),
-                  Expanded(
-                    child: GestureDetector(
-                      onTap: () {
-                        setState(() {
-                          isIncome = true;
-                        });
-                      },
-                      child: Container(
-                        margin: const EdgeInsets.all(4),
-                        decoration: BoxDecoration(
-                          color: isIncome ? Colors.white : Colors.transparent,
-                          borderRadius: BorderRadius.circular(30),
-                        ),
-                        child: Center(
-                          child: Text(
-                            '입금',
-                            style: TextStyle(
-                              color: colors.primaryText,
-                              fontWeight: FontWeight.bold,
+                        Expanded(
+                          child: GestureDetector(
+                            onTap: () {
+                              setState(() {
+                                isIncome = true;
+                              });
+                            },
+                            child: Container(
+                              margin: const EdgeInsets.all(4),
+                              decoration: BoxDecoration(
+                                color: isIncome ? Colors.white : Colors.transparent,
+                                borderRadius: BorderRadius.circular(30),
+                              ),
+                              child: Center(
+                                child: Text(
+                                  '입금',
+                                  style: TextStyle(
+                                    color: colors.primaryText,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ),
                             ),
                           ),
                         ),
-                      ),
+                      ],
                     ),
                   ),
+
+                  const SizedBox(height: 40),
+
+                  Text(
+                    '금액을 입력하세요',
+                    style: TextStyle(color: colors.primaryText, fontSize: 16),
+                  ),
+
+                  TextField(
+                    controller: amountController,
+                    keyboardType: TextInputType.number,
+                    style: TextStyle(color: colors.primaryText),
+                    decoration: InputDecoration(
+                      hintText: '0원',
+                      hintStyle: TextStyle(color: colors.subText),
+                    ),
+                  ),
+
+                  const SizedBox(height: 40),
+
+                  Text(
+                    isIncome ? '입금처를 입력하세요' : '지출처를 입력하세요',
+                    style: TextStyle(color: colors.primaryText, fontSize: 16),
+                  ),
+
+                  TextField(
+                    controller: titleController,
+                    style: TextStyle(color: colors.primaryText),
+                  ),
+
+                  const SizedBox(height: 40),
+
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        '카테고리 선택',
+                        style: TextStyle(color: colors.primaryText, fontSize: 16),
+                      ),
+                      GestureDetector(
+                        onTap: () async {
+                          final result = await Navigator.push<String>(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => CategorySelectScreen(
+                                currentCategory: selectedCategory,
+                                showChangeDialog: false,
+                              ),
+                            ),
+                          );
+                          if (result != null) {
+                            setState(() => selectedCategory = result);
+                          }
+                        },
+                        child: Row(
+                          children: [
+                            Text(
+                              selectedCategory,
+                              style: TextStyle(
+                                color: colors.primaryText,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                            Icon(Icons.chevron_right, color: colors.primaryText),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+
+                  const SizedBox(height: 32),
                 ],
               ),
             ),
+          ),
 
-            const SizedBox(height: 40),
-
-            Text(
-              '금액을 입력하세요',
-              style: TextStyle(color: colors.primaryText, fontSize: 16),
+          // 하단 고정 버튼
+          Padding(
+            padding: EdgeInsets.fromLTRB(
+              18,
+              0,
+              18,
+              MediaQuery.of(context).padding.bottom + 20,
             ),
-
-            TextField(
-              controller: amountController,
-              keyboardType: TextInputType.number,
-              style: TextStyle(color: colors.primaryText),
-              decoration: InputDecoration(
-                hintText: '0원',
-                hintStyle: TextStyle(color: colors.subText),
-              ),
-            ),
-
-            const SizedBox(height: 40),
-
-            Text(
-              isIncome ? '입금처를 입력하세요' : '지출처를 입력하세요',
-              style: TextStyle(color: colors.primaryText, fontSize: 16),
-            ),
-
-            TextField(
-              controller: titleController,
-              style: TextStyle(color: colors.primaryText),
-            ),
-
-            const SizedBox(height: 40),
-
-            // 기존 DropdownButton 부분을 아래로 교체
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text(
-                  '카테고리 선택',
-                  style: TextStyle(color: colors.primaryText, fontSize: 16),
-                ),
-                GestureDetector(
-                  onTap: () async {
-                    // ✅ 카테고리 선택 화면으로 이동
-                    final result = await Navigator.push<String>(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => CategorySelectScreen(
-                          currentCategory: selectedCategory,
-                          showChangeDialog: false, // 추가 화면에서는 팝업 없음
-                        ),
-                      ),
-                    );
-                    if (result != null) {
-                      setState(() => selectedCategory = result);
-                    }
-                  },
-                  child: Row(
-                    children: [
-                      Text(
-                        selectedCategory,
-                        style: TextStyle(
-                          color: colors.primaryText,
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                      Icon(Icons.chevron_right, color: colors.primaryText),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-
-            const Spacer(),
-
-            GestureDetector(
+            child: GestureDetector(
               onTap: _savePayment,
               child: Container(
                 height: 56,
-                margin: const EdgeInsets.only(bottom: 40),
                 decoration: BoxDecoration(
                   color: colors.cardBackground,
                   borderRadius: BorderRadius.circular(16),
@@ -298,8 +310,8 @@ class _AddPaymentScreenState extends State<AddPaymentScreen> {
                 ),
               ),
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }

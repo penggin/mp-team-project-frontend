@@ -8,6 +8,7 @@ import 'category_payment_screen.dart';
 import 'main_payment_screen.dart';
 import '../app_colors.dart';
 import '../background_task_handler.dart';
+import '../services/experience_service.dart';
 import '../services/location_service.dart';
 import '../services/payment_push_notification_service.dart';
 
@@ -15,6 +16,9 @@ class MainScreen extends StatefulWidget {
   MainScreen({Key? key}) : super(key: globalKey);
   static final GlobalKey<MainScreenState> globalKey =
       GlobalKey<MainScreenState>();
+  // HomeScreen 에 결제 신호를 직접 전달하기 위한 키
+  static final GlobalKey<HomeScreenState> homeKey =
+      GlobalKey<HomeScreenState>();
 
   @override
   State<MainScreen> createState() => MainScreenState();
@@ -40,17 +44,33 @@ class MainScreenState extends State<MainScreen> {
     _screens = [
       const SettingsScreen(),
       MainPaymentScreen(key: _paymentKey),
-      const HomeScreen(),
+      HomeScreen(key: MainScreen.homeKey),
       StatisticsScreen(key: _statisticsKey),
-      // CategoryPaymentScreen은 _paymentKey 상태에서 실시간으로 데이터를 읽으므로
-      // 별도 key 없이 StatelessWidget처럼 동작해도 무방하다.
-      // _paymentKey.currentState가 갱신되면 changeTab() → setState() → build() → 최신 데이터 반영.
       CategoryPaymentScreen(
         transactions: MainPaymentScreen.transactionsOf(_paymentKey),
         groupedIndexes: MainPaymentScreen.groupedIndexesOf(_paymentKey),
       ),
     ];
     _startForegroundService();
+    // 백그라운드 결제 신호 수신 등록
+    FlutterForegroundTask.addTaskDataCallback(_onTaskData);
+  }
+
+  @override
+  void dispose() {
+    FlutterForegroundTask.removeTaskDataCallback(_onTaskData);
+    super.dispose();
+  }
+
+  /// 백그라운드에서 결제 건이 저장될 때 호출됨.
+  /// 금액이 기준값 이상이면 HomeScreen 에 팝업 표시를 요청한다.
+  void _onTaskData(Object data) {
+    if (data is! Map) return;
+    if (data['action'] != 'refresh') return;
+    final rawAmount = data['amount'];
+    final amount = rawAmount is int ? rawAmount : int.tryParse('$rawAmount') ?? 0;
+    // 홈 화면 데이터 갱신 + 금액 조건 팝업 확인
+    MainScreen.homeKey.currentState?.onPaymentReceived(amount);
   }
 
   Future<void> _startForegroundService() async {

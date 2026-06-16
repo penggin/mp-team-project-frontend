@@ -14,6 +14,10 @@ class ExperienceService {
   static const String _keyTodaySpendAmount = 'budget_today_spend_amount';
   static const String _keyDemoModeEnabled = 'demo_mode_enabled';
   static const String _keyLastLevel = 'xp_last_level';
+  // 과소비 알림창 — 오늘 이미 표시했으면 다시 띄우지 않음
+  static const String _keyBudgetAlertDate = 'budget_alert_shown_date';
+  // 과소비 알림 기준금액 (SharedPreferences 저장, 기본값 30,000원)
+  static const String _keyBudgetAlertThreshold = 'budget_alert_threshold';
 
   static final ValueNotifier<bool> demoModeEnabled = ValueNotifier(false);
   static final ValueNotifier<int> monthlyBudgetNotifier = ValueNotifier(0);
@@ -119,6 +123,31 @@ class ExperienceService {
     final base = await getDailyBaseBudget();
     final carryover = await getCarryoverAmount();
     return base + carryover;
+  }
+
+  /// 과소비 알림 기준금액 조회 (0 이하면 알림 비활성화)
+  static Future<int> getBudgetAlertThreshold() async {
+    final prefs = await SharedPreferences.getInstance();
+    // 기본값 30,000원
+    return prefs.getInt(_keyBudgetAlertThreshold) ?? 30000;
+  }
+
+  /// 과소비 알림 기준금액 저장
+  static Future<void> setBudgetAlertThreshold(int amount) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt(_keyBudgetAlertThreshold, amount);
+  }
+
+  /// 오늘 과소비 알림창을 이미 표시했는지 확인
+  static Future<bool> isBudgetAlertShownToday() async {
+    final prefs = await SharedPreferences.getInstance();
+    return (prefs.getString(_keyBudgetAlertDate) ?? '') == _todayStr();
+  }
+
+  /// 오늘 과소비 알림창을 표시했음으로 기록
+  static Future<void> markBudgetAlertShownToday() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_keyBudgetAlertDate, _todayStr());
   }
 
   /// 하루 예산을 초과했는지 확인
