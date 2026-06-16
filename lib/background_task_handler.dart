@@ -6,6 +6,7 @@ import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:notification_listener_service/notification_event.dart';
 import 'package:notification_listener_service/notification_listener_service.dart';
 import 'services/api_service.dart';
+import 'services/experience_service.dart';
 import 'services/notification_processing.dart';
 import 'services/payment_ingestion_workflow.dart';
 import 'services/payment_push_notification_service.dart';
@@ -40,6 +41,10 @@ class PaymentTaskHandler extends TaskHandler {
 
   bool _listenerStarted = false;
   StreamSubscription<ServiceNotificationEvent>? _notificationSubscription;
+  // 중복 처리 방지: 이미 처리 중인 핵결 텍스트 집합
+  final Set<String> _processingFingerprints = {};
+  // 최근 처리 완료 지문 (30초 내 동일 알림 재수신 방지)
+  final Map<String, DateTime> _recentFingerprints = {};
 
   @override
   Future<void> onStart(DateTime timestamp, TaskStarter starter) async {
@@ -51,7 +56,10 @@ class PaymentTaskHandler extends TaskHandler {
   @override
   Future<void> onRepeatEvent(DateTime timestamp) async {
     await _maintainTokenLifecycle();
-    await _startNotificationListener();
+    // 스트림이 종료되었을 때만 재연결, 살아있으면 참여 안 함
+    if (!_listenerStarted) {
+      await _startNotificationListener();
+    }
   }
 
   @override
@@ -72,8 +80,10 @@ class PaymentTaskHandler extends TaskHandler {
       return;
     }
 
-    _listenerStarted = true;
+    // 기존 구독이 남아있으면 먼저 취소
     await _notificationSubscription?.cancel();
+    _notificationSubscription = null;
+    _listenerStarted = true;
     _notificationSubscription = NotificationListenerService.notificationsStream
         .listen(
           _processNotification,
@@ -111,28 +121,61 @@ class PaymentTaskHandler extends TaskHandler {
   Future<void> _processNotification(ServiceNotificationEvent event) async {
     final candidate = NotificationProcessing.candidateFromEvent(event);
     if (candidate == null) return;
-    if (!await _maintainTokenLifecycle()) return;
 
-    debugPrint('백그라운드 알림 감지: ${candidate.rawText}');
-
-    final candidateProcessor = _candidateProcessor;
-    final result = await (candidateProcessor != null
-        ? candidateProcessor(candidate)
-        : PaymentIngestionWorkflow.processCandidate(candidate));
-    if (!result.saved) {
-      debugPrint('백그라운드 알림 처리 결과: ${result.status.name}');
+    // 이미 처리 중이거나 30초 이내 중복 알림 방지
+    final fp = candidate.fingerprint;
+    final now = DateTime.now();
+    if (_processingFingerprints.contains(fp)) {
+      debugPrint('중복 알림 무시 (이미 처리 중): $fp');
+      return;
+    }
+    final lastSeen = _recentFingerprints[fp];
+    if (lastSeen != null && now.difference(lastSeen).inSeconds < 30) {
+      debugPrint('중복 알림 무시 (30초 이내 재수신): $fp');
       return;
     }
 
+    _processingFingerprints.add(fp);
     try {
-      await _pushNotificationService.showSavedPayment(result);
-    } catch (e) {
-      debugPrint('백그라운드 결제 처리 알림 전송 실패: $e');
-    }
+      if (!await _maintainTokenLifecycle()) return;
 
-    // UI 측에 갱신 신호 전송 (결제 금액 포함)
-    final amount = result.parsed?['normalized_transaction']?['amount'];
-    final parsedAmount = amount is int ? amount : int.tryParse('$amount') ?? 0;
-    _sendDataToMain({'action': 'refresh', 'amount': parsedAmount});
+      debugPrint('백그라운드 알림 감지: ${candidate.rawText}');
+
+      final candidateProcessor = _candidateProcessor;
+      final result = await (candidateProcessor != null
+          ? candidateProcessor(candidate)
+          : PaymentIngestionWorkflow.processCandidate(candidate));
+
+      if (!result.saved) {
+        debugPrint('백그라운드 알림 처리 결과: ${result.status.name}');
+        return;
+      }
+
+      // 성공 시 지문 등록
+      _recentFingerprints[fp] = now;
+      // 오래된 지문 정리 (1분 이상 지난 항목)
+      _recentFingerprints.removeWhere(
+        (_, ts) => now.difference(ts).inSeconds >= 60,
+      );
+
+      try {
+        await _pushNotificationService.showSavedPayment(result);
+      } catch (e) {
+        debugPrint('백그라운드 결제 처리 알림 전송 실패: $e');
+      }
+
+      // UI 측에 갱신 신호 전송 (결제 금액 포함)
+      final amount = result.parsed?['normalized_transaction']?['amount'];
+      final parsedAmount =
+          amount is int ? amount : int.tryParse('$amount') ?? 0;
+
+      // SharedPreferences에도 저장 — 앱 종료 후 재실행 시에도 팝업 표시 가능
+      await ExperienceService.savePendingAlert(parsedAmount);
+
+      // 포그라운드 실행 중이면 즉시 전달
+      _sendDataToMain({'action': 'refresh', 'amount': parsedAmount});
+    } finally {
+      _processingFingerprints.remove(fp);
+    }
   }
 }

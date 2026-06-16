@@ -65,11 +65,17 @@ class MainScreenState extends State<MainScreen> {
   /// 백그라운드에서 결제 건이 저장될 때 호출됨.
   /// 금액이 기준값 이상이면 HomeScreen 에 팝업 표시를 요청한다.
   void _onTaskData(Object data) {
-    if (data is! Map) return;
-    if (data['action'] != 'refresh') return;
+    if (data is! Map) {
+      debugPrint('[BudgetAlert] _onTaskData: Map이 아님 — $data');
+      return;
+    }
+    if (data['action'] != 'refresh') {
+      debugPrint("[BudgetAlert] _onTaskData: action=${data['action']} — 무시");
+      return;
+    }
     final rawAmount = data['amount'];
     final amount = rawAmount is int ? rawAmount : int.tryParse('$rawAmount') ?? 0;
-    // 홈 화면 데이터 갱신 + 금액 조건 팝업 확인
+    debugPrint('[BudgetAlert] _onTaskData 수신: amount=$amount, homeKey=${MainScreen.homeKey.currentState != null}');
     MainScreen.homeKey.currentState?.onPaymentReceived(amount);
   }
 

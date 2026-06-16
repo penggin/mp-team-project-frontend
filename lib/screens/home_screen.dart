@@ -14,7 +14,6 @@ import 'budget_alert_dialog.dart';
 import 'character_dialogs.dart';
 import 'main_screen.dart';
 
-// 레벨 + species (+ angry) → 캐릭터 에셋 매핑
 String characterAsset(int level, {String? species, bool angry = false}) {
   final suffix = angry ? '_rage' : '';
   switch (species) {
@@ -37,24 +36,22 @@ String characterAsset(int level, {String? species, bool angry = false}) {
 bool _crossedEvolution(int prev, int curr) =>
     (prev < 5 && curr >= 5) || (prev < 10 && curr >= 10);
 
-// ─── 숫자 포맷 정규식 — 파일 최상단에 한 번만 컴파일 ───────────────
 final _amountRegex = RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))');
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
-
   @override
   State<HomeScreen> createState() => HomeScreenState();
 }
 
-class HomeScreenState extends State<HomeScreen> {
+class HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   // ── 펫 상태 ──────────────────────────────────────────────────────
   int?    _level;
-  double  _expProgress  = 0.0;
-  int     _totalExp     = 0;
+  double  _expProgress   = 0.0;
+  int     _totalExp      = 0;
   String? _petName;
   String? _petSpecies;
-  String  _petMood      = 'normal';
+  String  _petMood       = 'normal';
   String? _petLoadError;
   bool    _isLoadingPetState = true;
   bool    _evolutionPending  = false;
@@ -62,19 +59,19 @@ class HomeScreenState extends State<HomeScreen> {
   bool    _isDemoModeEnabled = false;
 
   // ── 예산 / 지출 ──────────────────────────────────────────────────
-  int _todaySpend     = 0;
-  int _monthlyBudget  = 0;
-  int _monthlySpend   = 0;
+  int _todaySpend      = 0;
+  int _monthlyBudget   = 0;
+  int _monthlySpend    = 0;
   int _dailyBaseBudget = 0;
-  int _carryover      = 0;
+  int _carryover       = 0;
 
-  // ── 통계 기반 멘트용 캐시 ────────────────────────────────────────
+  // ── 통계 기반 멘트 ────────────────────────────────────────────────
   String? _topCategory;
   int     _topCategoryAmount = 0;
   int     _prevMonthSpend    = 0;
-  // 전월 데이터는 월이 바뀌기 전까지 재사용
-  int?    _cachedPrevMonthKey;   // 캐시한 시점의 month 값 (이번 달 month)
-  int     _cachedPrevMonthSpend = 0;
+  // 전월 캐시 — static 으로 탭 전환 후에도 유지
+  static int?  _sCachedPrevMonthKey;
+  static int   _sCachedPrevMonthSpend = 0;
 
   // ── UI 상태 ──────────────────────────────────────────────────────
   String  _currentComment = '탭하면 말할게~';
@@ -86,29 +83,36 @@ class HomeScreenState extends State<HomeScreen> {
   bool   _showAngryAnim = false;
   static const Duration _angryReactionDuration = Duration(seconds: 5);
 
-  // ── 중복 로딩 방지 (진행 중인 Future 저장) ───────────────────────
+  // ── 중복 로딩 방지 ───────────────────────────────────────────────
   Future<void>? _loadingFuture;
 
   final _dialogs = CharacterDialogs();
 
-  // ── 미리 계산해 두는 파생 값 (build에서 재계산 방지) ───────────────
+  // ── 파생 레이블 캐시 ──────────────────────────────────────────────
   String? _cachedCharacterLabel;
   String? _cachedPetSubtitle;
   String? _cachedPetTitle;
 
+  // =========================================================
+  // Lifecycle
+  // =========================================================
+
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _requestPermissions();
     _isDemoModeEnabled = ExperienceService.demoModeEnabled.value;
     ExperienceService.demoModeEnabled.addListener(_onDemoModeChanged);
     ExperienceService.monthlyBudgetNotifier.addListener(_onBudgetChanged);
     ExperienceService.loadDemoMode();
     _loadAll();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _checkPendingAlert());
   }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     ExperienceService.demoModeEnabled.removeListener(_onDemoModeChanged);
     ExperienceService.monthlyBudgetNotifier.removeListener(_onBudgetChanged);
     _angryTimer?.cancel();
@@ -116,15 +120,35 @@ class HomeScreenState extends State<HomeScreen> {
     super.dispose();
   }
 
-  // ── 외부 진입점 (MainScreenState → 결제 감지) ──────────────────────
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) _checkPendingAlert();
+  }
+
+  // =========================================================
+  // 알림 팝업
+  // =========================================================
+
+  Future<void> _checkPendingAlert() async {
+    final pendingAmount = await ExperienceService.consumePendingAlert();
+    if (pendingAmount == null) return;
+    await onPaymentReceived(pendingAmount);
+  }
+
   Future<void> onPaymentReceived(int amount) async {
-    // 기준금액과 데이터 갱신을 병렬로 처리
-    final results = await Future.wait([
-      ExperienceService.getBudgetAlertThreshold(),
-      _loadAll(),
-    ]);
-    final threshold = results[0] as int;
-    if (threshold <= 0 || amount < threshold || !mounted) return;
+    debugPrint('[BudgetAlert] onPaymentReceived: amount=$amount');
+    final threshold = await ExperienceService.getBudgetAlertThreshold();
+    debugPrint('[BudgetAlert] threshold=$threshold, mounted=$mounted');
+
+    // 데이터 갱신은 항상 실행 (await 없이)
+    _loadAll();
+
+    if (threshold <= 0 || amount < threshold || !mounted) {
+      debugPrint('[BudgetAlert] 팝업 조건 미충족');
+      return;
+    }
+
+    debugPrint('[BudgetAlert] 팝업 표시!');
     BudgetAlertDialog.show(
       context,
       onGoToHistory: () {
@@ -135,7 +159,10 @@ class HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  // ── 이벤트 핸들러 ─────────────────────────────────────────────────
+  // =========================================================
+  // 이벤트 핸들러
+  // =========================================================
+
   void _onDemoModeChanged() {
     if (!mounted) return;
     setState(() => _isDemoModeEnabled = ExperienceService.demoModeEnabled.value);
@@ -145,7 +172,6 @@ class HomeScreenState extends State<HomeScreen> {
     if (mounted) _loadAll();
   }
 
-  // ── 상태 게터 ──────────────────────────────────────────────────────
   bool get _isAngry => _showAngryAnim;
 
   bool get _isOverBudget {
@@ -154,42 +180,37 @@ class HomeScreenState extends State<HomeScreen> {
     return total > 0 && _todaySpend > total;
   }
 
-  // ── 데이터 로드 ────────────────────────────────────────────────────
+  // =========================================================
+  // 데이터 로드
+  // =========================================================
+
   Future<void> _loadAll() {
-    // 이미 로딩 중이면 그 Future를 그대로 반환 (중복 호출 방지)
     _loadingFuture ??= _doLoadAll().whenComplete(() => _loadingFuture = null);
     return _loadingFuture!;
   }
 
   Future<void> _doLoadAll() async {
-
     if (mounted) setState(() { _isLoadingPetState = true; _petLoadError = null; });
 
-    final now = DateTime.now();
-
-    // ① 이번 달 + 펫 + 예산 + 전월 — 모두 동시에 병렬 시작
-    //    전월은 캐시가 있어도 일단 같이 쏜다 (캐시 있으면 결과를 버림)
+    final now       = DateTime.now();
     final prevMonth = DateTime(now.year, now.month - 1);
-    final needPrevFetch = _cachedPrevMonthKey != now.month;
+    final needPrev  = _sCachedPrevMonthKey != now.month;
 
-    final futures = [
+    // ① API 전부 동시 시작 (전월 포함)
+    final apiResults = await Future.wait([
       ApiService.getPetState(),
       ApiService.getLedgerEntries(year: now.year, month: now.month),
       ApiService.getMonthlyBudget(year: now.year, month: now.month),
-      if (needPrevFetch)
+      if (needPrev)
         ApiService.getLedgerEntries(year: prevMonth.year, month: prevMonth.month),
-    ];
+    ]);
 
-    final results = await Future.wait(futures);
+    final petState    = apiResults[0] as Map<String, dynamic>?;
+    final entries     = apiResults[1] as List<Map<String, dynamic>>;
+    final budgetData  = apiResults[2] as Map<String, dynamic>?;
+    final prevEntries = needPrev ? apiResults[3] as List<Map<String, dynamic>> : null;
 
-    final petState   = results[0] as Map<String, dynamic>?;
-    final entries    = results[1] as List<Map<String, dynamic>>;
-    final budgetData = results[2] as Map<String, dynamic>?;
-    final prevEntries = needPrevFetch
-        ? results[3] as List<Map<String, dynamic>>
-        : null;
-
-    // ② 가계부 항목을 한 번만 순회해서 지출/통계 동시 집계
+    // ② 가계부 단일 루프 집계
     int todaySpend   = 0;
     int monthlySpend = 0;
     final Map<String, int> categoryTotals = {};
@@ -198,77 +219,64 @@ class HomeScreenState extends State<HomeScreen> {
       if ((entry['type'] as String? ?? '') != 'expense') continue;
       final amount = (entry['amount'] as num?)?.toInt() ?? 0;
       final cat    = entry['category']?.toString() ?? 'others';
-
-      // 월간 지출
       monthlySpend += amount;
-
-      // 오늘 지출
+      categoryTotals[cat] = (categoryTotals[cat] ?? 0) + amount;
       final txAtStr = (entry['transaction_at'] as String? ??
-              entry['created_at'] as String? ?? '').trim();
+          entry['created_at'] as String? ?? '').trim();
       if (txAtStr.isNotEmpty) {
         try {
-          if (DateTime.parse(txAtStr).toLocal().day == now.day) {
-            todaySpend += amount;
-          }
+          if (DateTime.parse(txAtStr).toLocal().day == now.day) todaySpend += amount;
         } catch (_) {}
       }
-
-      // 카테고리 집계
-      categoryTotals[cat] = (categoryTotals[cat] ?? 0) + amount;
     }
 
-    // 최다 지출 카테고리
-    String? topCat;
-    int topAmt = 0;
+    String? topCat; int topAmt = 0;
     for (final e in categoryTotals.entries) {
       if (e.value > topAmt) { topAmt = e.value; topCat = e.key; }
     }
 
-    // ③ 전월 지출 — 이미 위에서 병렬로 받아뒀거나 캐시 사용
+    // ③ 전월 집계 (캐시 없을 때만)
     int prevMonthSpend;
-    if (!needPrevFetch) {
-      prevMonthSpend = _cachedPrevMonthSpend;
+    if (!needPrev) {
+      prevMonthSpend = _sCachedPrevMonthSpend;
     } else {
       prevMonthSpend = 0;
       for (final e in prevEntries!) {
         if ((e['type'] as String? ?? '') != 'expense') continue;
         prevMonthSpend += (e['amount'] as num?)?.toInt() ?? 0;
       }
-      _cachedPrevMonthKey   = now.month;
-      _cachedPrevMonthSpend = prevMonthSpend;
+      _sCachedPrevMonthKey   = now.month;
+      _sCachedPrevMonthSpend = prevMonthSpend;
     }
 
-    // ④ SharedPreferences 4개 병렬 읽기
-    final sprefs = await Future.wait([
-      ExperienceService.getMonthlyBudget(),
-      ExperienceService.getDailyBaseBudget(),
-      ExperienceService.getCarryoverAmount(),
-    ]);
-    final localBudget = sprefs[0] as int;
-    final dailyBase   = sprefs[1] as int;
-    final carryover   = sprefs[2] as int;
-
-    // ⑤ 예산 확정 + 오늘 지출 기록 (병렬)
+    // ④ SharedPreferences 읽기 + 쓰기 전부 병렬
     final budgetConfigured = budgetData?['is_configured'] as bool? ?? false;
     final serverBudget = budgetConfigured
         ? ((budgetData?['monthly_limit'] as num?)?.toInt() ?? 0) : 0;
-    final monthlyBudget = serverBudget > 0 ? serverBudget : localBudget;
 
-    await Future.wait([
-      ExperienceService.recordTodaySpend(todaySpend),
-      if (serverBudget > 0) ExperienceService.setMonthlyBudget(serverBudget),
+    final prefs = await Future.wait([
+      ExperienceService.getMonthlyBudget(),              // [0]
+      ExperienceService.getDailyBaseBudget(),             // [1]
+      ExperienceService.getCarryoverAmount(),             // [2]
+      ExperienceService.recordTodaySpend(todaySpend),    // [3] void
+      if (serverBudget > 0)
+        ExperienceService.setMonthlyBudget(serverBudget), // [4] void
     ]);
 
-    // ⑥ 펫 레벨 / 진화 판단
-    final newLevel    = petState == null ? null : _validLevel(petState['level']);
-    final totalExp    = petState == null ? null : max(0, _intValue(petState['exp']) ?? 0);
-    final prevLevel   = _level;
+    final localBudget   = prefs[0] as int;
+    final dailyBase     = prefs[1] as int;
+    final carryover     = prefs[2] as int;
+    final monthlyBudget = serverBudget > 0 ? serverBudget : localBudget;
+
+    // ⑤ 펫 레벨 / 진화 판단
+    final newLevel   = petState == null ? null : _validLevel(petState['level']);
+    final totalExp   = petState == null ? null : max(0, _intValue(petState['exp']) ?? 0);
+    final prevLevel  = _level;
     final shouldEvolve =
         prevLevel != null && newLevel != null &&
         _crossedEvolution(prevLevel, newLevel) && !_evolutionPending;
     final petMood = (petState?['mood']?.toString() == 'angry') ? 'angry' : 'normal';
 
-    _loadingFuture = null;  // Future 참조 해제
     if (!mounted) return;
 
     setState(() {
@@ -297,8 +305,6 @@ class HomeScreenState extends State<HomeScreen> {
       _petSpecies   = _stringValue(petState['species']);
       _petMood      = petMood;
       if (shouldEvolve) _evolutionPending = true;
-
-      // 파생 레이블 갱신
       _invalidateLabelCache();
     });
 
@@ -310,7 +316,10 @@ class HomeScreenState extends State<HomeScreen> {
     _refreshCharacterIfNeeded(newLevel);
   }
 
-  // ── 레이블 캐시 무효화 (setState 내부에서 호출) ─────────────────────
+  // =========================================================
+  // 레이블 캐시
+  // =========================================================
+
   void _invalidateLabelCache() {
     _cachedCharacterLabel = _level == null ? null : _characterLabel(_level!);
     _cachedPetTitle = _petName ?? _cachedCharacterLabel ?? '펫 상태 확인 중';
@@ -326,7 +335,10 @@ class HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  // ── 캐릭터 영상 ────────────────────────────────────────────────────
+  // =========================================================
+  // 캐릭터 영상
+  // =========================================================
+
   void _initVideoController(int level) {
     final asset = characterAsset(level, species: _petSpecies, angry: _isAngry);
     final controller = VideoPlayerController.asset(asset);
@@ -335,10 +347,7 @@ class HomeScreenState extends State<HomeScreen> {
     controller.initialize().then((_) {
       if (!mounted || _videoController != controller) return;
       setState(() {});
-      controller
-        ..setLooping(true)
-        ..setVolume(0.0)
-        ..play();
+      controller..setLooping(true)..setVolume(0.0)..play();
     });
   }
 
@@ -349,15 +358,15 @@ class HomeScreenState extends State<HomeScreen> {
     _initVideoController(newLevel);
   }
 
-  // ── 분노 리액션 ────────────────────────────────────────────────────
+  // =========================================================
+  // 분노 리액션
+  // =========================================================
+
   void _triggerAngryReaction() {
     final level = _level;
     if (!mounted || level == null) return;
     _angryTimer?.cancel();
-    setState(() {
-      _showAngryAnim  = true;
-      _currentComment = _pickAngryComment();
-    });
+    setState(() { _showAngryAnim = true; _currentComment = _pickAngryComment(); });
     _refreshCharacterIfNeeded(level);
     _angryTimer = Timer(_angryReactionDuration, () {
       if (!mounted) return;
@@ -367,7 +376,10 @@ class HomeScreenState extends State<HomeScreen> {
     });
   }
 
-  // ── 펫 상호작용 ────────────────────────────────────────────────────
+  // =========================================================
+  // 펫 상호작용
+  // =========================================================
+
   Future<void> _playWithPet() async {
     if (_isInteractingPet || _level == null) return;
     setState(() => _isInteractingPet = true);
@@ -396,27 +408,24 @@ class HomeScreenState extends State<HomeScreen> {
       setState(() => _petLoadError = '펫 상태를 불러오지 못했어요');
       return;
     }
-
-    final prevLevel  = _level;
-    final totalExp   = max(0, _intValue(petState['exp']) ?? 0);
-    final shouldEvo  = prevLevel != null &&
+    final prevLevel = _level;
+    final totalExp  = max(0, _intValue(petState['exp']) ?? 0);
+    final shouldEvo = prevLevel != null &&
         _crossedEvolution(prevLevel, newLevel) && !_evolutionPending;
-    final moodRaw    = petState['mood']?.toString() ?? 'normal';
-
+    final moodRaw   = petState['mood']?.toString() ?? 'normal';
     setState(() {
-      _petLoadError    = null;
+      _petLoadError      = null;
       _isLoadingPetState = false;
-      _level           = newLevel;
-      _totalExp        = totalExp;
-      _expProgress     = ExperienceService.expProgress(totalExp);
-      _petName         = _stringValue(petState['name']);
-      _petSpecies      = _stringValue(petState['species']);
-      _petMood         = moodRaw == 'angry' ? 'angry' : 'normal';
+      _level             = newLevel;
+      _totalExp          = totalExp;
+      _expProgress       = ExperienceService.expProgress(totalExp);
+      _petName           = _stringValue(petState['name']);
+      _petSpecies        = _stringValue(petState['species']);
+      _petMood           = moodRaw == 'angry' ? 'angry' : 'normal';
       if (successComment != null) _currentComment = successComment;
       if (shouldEvo) _evolutionPending = true;
       _invalidateLabelCache();
     });
-
     if (shouldEvo) {
       WidgetsBinding.instance.addPostFrameCallback((_) => _triggerEvolution());
     } else {
@@ -424,7 +433,10 @@ class HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  // ── 진화 ───────────────────────────────────────────────────────────
+  // =========================================================
+  // 진화
+  // =========================================================
+
   void _triggerEvolution() {
     final level = _level;
     if (!mounted || level == null) return;
@@ -449,7 +461,10 @@ class HomeScreenState extends State<HomeScreen> {
     ));
   }
 
-  // ── 권한 요청 ──────────────────────────────────────────────────────
+  // =========================================================
+  // 권한 요청
+  // =========================================================
+
   Future<void> _requestPermissions() async {
     try {
       final granted = await NotificationListenerService.isPermissionGranted();
@@ -459,7 +474,10 @@ class HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  // ── 헬퍼 ───────────────────────────────────────────────────────────
+  // =========================================================
+  // 헬퍼
+  // =========================================================
+
   int? _validLevel(Object? value) {
     final level = _intValue(value);
     return (level == null || level < 1) ? null : level;
@@ -479,28 +497,28 @@ class HomeScreenState extends State<HomeScreen> {
   String _formatAmount(int amount) =>
       amount.toString().replaceAllMapped(_amountRegex, (m) => '${m[1]},');
 
-  // ── 대사 ───────────────────────────────────────────────────────────
-  // 대사 내용 수정은 character_dialogs.dart 에서 하세요.
+  // =========================================================
+  // 대사 (내용 수정은 character_dialogs.dart에서)
+  // =========================================================
 
   String _pickAngryComment() => _dialogs.randomAngryComment(
-        species: _petSpecies,       level: _level ?? 1,
-        topCategory: _topCategory,  topCategoryAmount: _topCategoryAmount,
+        species: _petSpecies,      level: _level ?? 1,
+        topCategory: _topCategory, topCategoryAmount: _topCategoryAmount,
         prevMonthSpend: _prevMonthSpend,
         monthlySpend: _monthlySpend, monthlyBudget: _monthlyBudget,
       );
 
   Future<void> _generateRandomComment() async {
-    // 먼저 댓글 선택 후 한 번에 setState
     final comment = _isOverBudget
         ? _dialogs.randomAngryComment(
-            species: _petSpecies,       level: _level ?? 1,
-            topCategory: _topCategory,  topCategoryAmount: _topCategoryAmount,
+            species: _petSpecies,      level: _level ?? 1,
+            topCategory: _topCategory, topCategoryAmount: _topCategoryAmount,
             prevMonthSpend: _prevMonthSpend,
             monthlySpend: _monthlySpend, monthlyBudget: _monthlyBudget,
           )
         : _dialogs.randomNormalComment(
-            species: _petSpecies,       level: _level ?? 1,
-            topCategory: _topCategory,  topCategoryAmount: _topCategoryAmount,
+            species: _petSpecies,      level: _level ?? 1,
+            topCategory: _topCategory, topCategoryAmount: _topCategoryAmount,
             prevMonthSpend: _prevMonthSpend,
             monthlySpend: _monthlySpend, monthlyBudget: _monthlyBudget,
           );
@@ -509,8 +527,6 @@ class HomeScreenState extends State<HomeScreen> {
       setState(() => _currentComment = comment);
       return;
     }
-
-    // 댓글 세팅 + interacting 플래그를 한 번에 처리
     setState(() { _currentComment = comment; _isInteractingPet = true; });
     try {
       await _interactWithPet('pet', successComment: comment);
@@ -519,7 +535,10 @@ class HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  // ── 레이블 ─────────────────────────────────────────────────────────
+  // =========================================================
+  // 레이블
+  // =========================================================
+
   String _characterLabel(int level) {
     switch (_petSpecies) {
       case 'horse':
@@ -546,7 +565,10 @@ class HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  // ── UI 빌더 ────────────────────────────────────────────────────────
+  // =========================================================
+  // UI 빌더
+  // =========================================================
+
   List<Widget> _buildDailyBudgetBar(ThemeColors colors) {
     final total    = _dailyBaseBudget + _carryover;
     final isOver   = _todaySpend > total;
@@ -601,6 +623,19 @@ class HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  Widget _buildStatColumn(String label, String value, ThemeColors colors,
+      {Color? valueColor}) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(label, style: TextStyle(fontSize: 12, color: colors.subText)),
+        Text(value,
+            style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold,
+                color: valueColor ?? colors.primaryText)),
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final colors          = context.watch<ThemeProvider>().colors;
@@ -625,7 +660,8 @@ class HomeScreenState extends State<HomeScreen> {
         ),
         actions: [
           IconButton(
-            icon: Icon(Icons.notifications_none, color: colors.primaryText, size: 32),
+            icon: Icon(Icons.notifications_none,
+                color: colors.primaryText, size: 32),
             onPressed: () => Navigator.push(context,
                 MaterialPageRoute(builder: (_) => const NotificationScreen()))
               .then((_) => _loadAll()),
@@ -640,7 +676,7 @@ class HomeScreenState extends State<HomeScreen> {
             children: [
               const SizedBox(height: 4),
 
-              // ── 상태 카드 ──────────────────────────────────────────
+              // ── 상태 카드 ────────────────────────────────────────
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                 decoration: BoxDecoration(
@@ -649,7 +685,6 @@ class HomeScreenState extends State<HomeScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // 레벨 + 이름
                     Row(children: [
                       Text(hasPetState ? 'LV : $level' : 'LV : --',
                           style: TextStyle(fontSize: 16,
@@ -665,7 +700,6 @@ class HomeScreenState extends State<HomeScreen> {
                           style: TextStyle(fontSize: 12, color: colors.subText)),
                     ],
                     const SizedBox(height: 10),
-                    // EXP 바
                     Row(children: [
                       Text('EXP',
                           style: TextStyle(fontSize: 13,
@@ -684,7 +718,6 @@ class HomeScreenState extends State<HomeScreen> {
                         ),
                       ),
                     ]),
-                    // 데모 버튼
                     if (_isDemoModeEnabled) ...[
                       const SizedBox(height: 12),
                       Align(
@@ -696,7 +729,8 @@ class HomeScreenState extends State<HomeScreen> {
                             OutlinedButton.icon(
                               onPressed: _isLoadingPetState ? null : _loadAll,
                               icon: const Icon(Icons.sync, size: 18),
-                              label: Text(_isLoadingPetState ? '동기화 중...' : '상태 동기화'),
+                              label: Text(_isLoadingPetState
+                                  ? '동기화 중...' : '상태 동기화'),
                               style: OutlinedButton.styleFrom(
                                 foregroundColor: colors.primaryText,
                                 side: BorderSide(color: colors.primaryText),
@@ -708,7 +742,8 @@ class HomeScreenState extends State<HomeScreen> {
                               onPressed: _isInteractingPet || !hasPetState
                                   ? null : _playWithPet,
                               icon: const Icon(Icons.favorite, size: 18),
-                              label: Text(_isInteractingPet ? '반영 중...' : '놀아주기'),
+                              label: Text(_isInteractingPet
+                                  ? '반영 중...' : '놀아주기'),
                               style: FilledButton.styleFrom(
                                 backgroundColor: colors.primaryText,
                                 foregroundColor: colors.background,
@@ -721,18 +756,15 @@ class HomeScreenState extends State<HomeScreen> {
                       ),
                     ],
                     const SizedBox(height: 20),
-                    // 에러
                     if (_petLoadError != null) ...[
                       Text(_petLoadError!,
                           style: TextStyle(fontSize: 12, color: colors.subText)),
                       const SizedBox(height: 12),
                     ],
-                    // 무드 칩
                     if (hasPetState) ...[
                       _buildPetMoodChip(isOverBudget, colors),
                       const SizedBox(height: 20),
                     ],
-                    // 오늘 소비 / 남은 예산
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
@@ -749,14 +781,13 @@ class HomeScreenState extends State<HomeScreen> {
                         ),
                       ],
                     ),
-                    // 일일 예산 바
                     if (_dailyBaseBudget > 0) ..._buildDailyBudgetBar(colors),
                   ],
                 ),
               ),
               const SizedBox(height: 8),
 
-              // ── 캐릭터 영상 ────────────────────────────────────────
+              // ── 캐릭터 영상 ──────────────────────────────────────
               Expanded(
                 flex: 5,
                 child: GestureDetector(
@@ -774,8 +805,10 @@ class HomeScreenState extends State<HomeScreen> {
                                 aspectRatio: videoController.value.aspectRatio,
                                 child: VideoPlayer(videoController))
                             : _isLoadingPetState
-                                ? CircularProgressIndicator(color: colors.primaryText)
-                                : Icon(Icons.pets, color: colors.primaryText, size: 48),
+                                ? CircularProgressIndicator(
+                                    color: colors.primaryText)
+                                : Icon(Icons.pets,
+                                    color: colors.primaryText, size: 48),
                       ),
                     ),
                   ),
@@ -783,11 +816,12 @@ class HomeScreenState extends State<HomeScreen> {
               ),
               const SizedBox(height: 12),
 
-              // ── 멘트 카드 ──────────────────────────────────────────
+              // ── 멘트 카드 ────────────────────────────────────────
               Expanded(
                 flex: 2,
                 child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 20, vertical: 18),
                   decoration: BoxDecoration(
                       color: colors.cardBackground,
                       borderRadius: BorderRadius.circular(20)),
@@ -804,21 +838,6 @@ class HomeScreenState extends State<HomeScreen> {
           ),
         ),
       ),
-    );
-  }
-
-  /// 레이블 + 값으로 구성된 열 위젯 (build 중복 제거)
-  Widget _buildStatColumn(String label, String value, ThemeColors colors,
-      {Color? valueColor}) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(label, style: TextStyle(fontSize: 12, color: colors.subText)),
-        Text(value,
-            style: TextStyle(
-                fontSize: 16, fontWeight: FontWeight.bold,
-                color: valueColor ?? colors.primaryText)),
-      ],
     );
   }
 }

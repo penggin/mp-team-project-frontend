@@ -414,16 +414,16 @@ class CharacterDialogs {
           break;
         case 'parrot':
           pool.addAll([
-            '$cat! $cat! ${amt}원! 이번 달 1등!',
+            '$cat! $cat! $amt원! 이번 달 1등!',
             '$cat에 제일 많이 썼어! 알고 있어?',
             '이번 달 최다 지출은 $cat! 어때?',
           ]);
           break;
         default:
           pool.addAll([
-            '이번 달 $cat에 제일 많이 썼어. ${amt}원이야.',
+            '이번 달 $cat에 제일 많이 썼어. $amt원이야.',
             '$cat 지출이 1위인 거 알아? 한번 돌아봐~',
-            '${amt}원을 $cat에 썼네. 의도한 거야?',
+            '$amt원을 $cat에 썼네. 의도한 거야?',
           ]);
       }
     }
@@ -436,23 +436,23 @@ class CharacterDialogs {
         switch (species) {
           case 'horse':
             pool.addAll([
-              '전달보다 ${saved}원 아꼈어! 대박이지 히힝!',
-              '이번 달 절약 성공! 전월보다 ${saved}원 줄었어!',
-              '${saved}원 절약이라니, 나 너 진짜 자랑스러워!',
+              '전달보다 $saved원 아꼈어! 대박이지 히힝!',
+              '이번 달 절약 성공! 전월보다 $saved원 줄었어!',
+              '$saved원 절약이라니, 나 너 진짜 자랑스러워!',
             ]);
             break;
           case 'parrot':
             pool.addAll([
-              '절약! 절약! ${saved}원 아꼈어! 최고야!',
-              '전달보다 ${saved}원 줄었어! 잘했어! 잘했어!',
-              '${saved}원 절약! 절약! 대단해!',
+              '절약! 절약! $saved원 아꼈어! 최고야!',
+              '전달보다 $saved원 줄었어! 잘했어! 잘했어!',
+              '$saved원 절약! 절약! 대단해!',
             ]);
             break;
           default:
             pool.addAll([
-              '전달보다 ${saved}원 덜 썼어! 진짜 잘했다~',
-              '이번 달 알뜰하게 잘 썼네. ${saved}원 절약이야!',
-              '${saved}원이나 아꼈어? 나 좀 감동받았어.',
+              '전달보다 $saved원 덜 썼어! 진짜 잘했다~',
+              '이번 달 알뜰하게 잘 썼네. $saved원 절약이야!',
+              '$saved원이나 아꼈어? 나 좀 감동받았어.',
             ]);
         }
       } else if (diff > 0 && diff < (prevMonthSpend * 0.1).toInt()) {
@@ -680,23 +680,23 @@ class CharacterDialogs {
       switch (species) {
         case 'horse':
           pool.addAll([
-            '$cat에만 ${amt}원?! 히힝, 이건 좀 심하지 않아?',
+            '$cat에만 $amt원?! 히힝, 이건 좀 심하지 않아?',
             '가장 많이 쓴 게 $cat이라니… 한번 줄여봐.',
-            '$cat ${amt}원은 솔직히 너무 많아. 다시 생각해봐.',
+            '$cat $amt원은 솔직히 너무 많아. 다시 생각해봐.',
           ]);
           break;
         case 'parrot':
           pool.addAll([
-            '$cat! ${amt}원! 이번 달 최다! 너무 많아!',
+            '$cat! $amt원! 이번 달 최다! 너무 많아!',
             '$cat 과소비! 과소비! 줄여줘!',
-            '$cat에 ${amt}원이라니! 진짜야? 진짜야?!',
+            '$cat에 $amt원이라니! 진짜야? 진짜야?!',
           ]);
           break;
         default:
           pool.addAll([
-            '$cat에 ${amt}원은 좀 많지 않아? 다시 봐봐.',
+            '$cat에 $amt원은 좀 많지 않아? 다시 봐봐.',
             '이번 달 $cat 지출이 제일 많아. 이 정도면 과소비야.',
-            '${amt}원을 $cat에 썼어? 솔직히 좀 당황했어.',
+            '$amt원을 $cat에 썼어? 솔직히 좀 당황했어.',
           ]);
       }
     }
@@ -710,7 +710,7 @@ class CharacterDialogs {
         switch (species) {
           case 'horse':
             pool.addAll([
-              '전달보다 ${diffStr}원이나 더 썼어! 히이잉, 왜 이래?!',
+              '전달보다 $diffStr원이나 더 썼어! 히이잉, 왜 이래?!',
               '지출이 전월 대비 $rate%나 늘었어. 나도 당황했다고!',
               '$rate% 증가라니… 히힝, 이건 같이 고민해봐야 해.',
             ]);
@@ -718,15 +718,15 @@ class CharacterDialogs {
           case 'parrot':
             pool.addAll([
               '전달보다 $rate% 증가! 증가! 심각해!',
-              '지출 ${diffStr}원 급증! 급증! 이게 뭔 일이야?!',
+              '지출 $diffStr원 급증! 급증! 이게 뭔 일이야?!',
               '$rate%나 늘었어! 늘었어! 이러면 안 되잖아!',
             ]);
             break;
           default:
             pool.addAll([
-              '전달보다 ${diffStr}원 더 썼어. $rate% 증가야. 좀 조심하자.',
+              '전달보다 $diffStr원 더 썼어. $rate% 증가야. 좀 조심하자.',
               '지출이 지난달보다 $rate%나 늘었어. 이번 달은 아끼자.',
-              '${diffStr}원 급증이야. 솔직히 나 좀 걱정돼.',
+              '$diffStr원 급증이야. 솔직히 나 좀 걱정돼.',
             ]);
         }
       }
@@ -738,20 +738,20 @@ class CharacterDialogs {
       switch (species) {
         case 'horse':
           pool.addAll([
-            '월 예산을 ${over}원이나 초과했어! 이러면 안 되잖아!',
-            '예산 ${over}원 넘겼어. 히힝… 나 좀 속상해.',
+            '월 예산을 $over원이나 초과했어! 이러면 안 되잖아!',
+            '예산 $over원 넘겼어. 히힝… 나 좀 속상해.',
           ]);
           break;
         case 'parrot':
           pool.addAll([
-            '예산 초과 ${over}원! 초과! 지금 당장 멈춰!',
-            '${over}원 넘겼어! 넘겼어! 어떡할 거야!',
+            '예산 초과 $over원! 초과! 지금 당장 멈춰!',
+            '$over원 넘겼어! 넘겼어! 어떡할 거야!',
           ]);
           break;
         default:
           pool.addAll([
-            '이번 달 예산 ${over}원 넘겼어. 다음 달은 진짜 계획적으로 가자.',
-            '${over}원 초과야. 솔직히 이번 달은 좀 반성해봐.',
+            '이번 달 예산 $over원 넘겼어. 다음 달은 진짜 계획적으로 가자.',
+            '$over원 초과야. 솔직히 이번 달은 좀 반성해봐.',
           ]);
       }
     }

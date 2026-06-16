@@ -14,10 +14,11 @@ class ExperienceService {
   static const String _keyTodaySpendAmount = 'budget_today_spend_amount';
   static const String _keyDemoModeEnabled = 'demo_mode_enabled';
   static const String _keyLastLevel = 'xp_last_level';
-  // 과소비 알림창 — 오늘 이미 표시했으면 다시 띄우지 않음
-  static const String _keyBudgetAlertDate = 'budget_alert_shown_date';
   // 과소비 알림 기준금액 (SharedPreferences 저장, 기본값 30,000원)
   static const String _keyBudgetAlertThreshold = 'budget_alert_threshold';
+  // 미수신 결제 알림 임시 저장 (로그 아웃 중 백그라운드에서 저장 → 실행 시 확인)
+  static const String _keyPendingAlertAmount = 'pending_alert_amount';
+  static const String _keyPendingAlertTime  = 'pending_alert_time';
 
   static final ValueNotifier<bool> demoModeEnabled = ValueNotifier(false);
   static final ValueNotifier<int> monthlyBudgetNotifier = ValueNotifier(0);
@@ -138,16 +139,37 @@ class ExperienceService {
     await prefs.setInt(_keyBudgetAlertThreshold, amount);
   }
 
-  /// 오늘 과소비 알림창을 이미 표시했는지 확인
-  static Future<bool> isBudgetAlertShownToday() async {
+  /// 결제 알림을 임시 저장 (백그라운드 서비스가 호출)
+  static Future<void> savePendingAlert(int amount) async {
     final prefs = await SharedPreferences.getInstance();
-    return (prefs.getString(_keyBudgetAlertDate) ?? '') == _todayStr();
+    await prefs.setInt(_keyPendingAlertAmount, amount);
+    await prefs.setString(
+        _keyPendingAlertTime, DateTime.now().toIso8601String());
   }
 
-  /// 오늘 과소비 알림창을 표시했음으로 기록
-  static Future<void> markBudgetAlertShownToday() async {
+  /// 임시 저장된 알림 가져오기 — 5분 이내에 저장된 것만 유효 처리
+  /// 반환 null: 임시 저장된 알림 없음
+  static Future<int?> consumePendingAlert() async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_keyBudgetAlertDate, _todayStr());
+    final amount = prefs.getInt(_keyPendingAlertAmount);
+    final timeStr = prefs.getString(_keyPendingAlertTime);
+    if (amount == null || timeStr == null) return null;
+
+    // 저장된 시각에서 5분이 지났으면 유효하지 않은 것으로 간주
+    final savedAt = DateTime.tryParse(timeStr);
+    if (savedAt == null ||
+        DateTime.now().difference(savedAt).inMinutes >= 5) {
+      await _clearPendingAlert(prefs);
+      return null;
+    }
+
+    await _clearPendingAlert(prefs);
+    return amount;
+  }
+
+  static Future<void> _clearPendingAlert(SharedPreferences prefs) async {
+    await prefs.remove(_keyPendingAlertAmount);
+    await prefs.remove(_keyPendingAlertTime);
   }
 
   /// 하루 예산을 초과했는지 확인
