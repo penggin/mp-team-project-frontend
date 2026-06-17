@@ -49,6 +49,8 @@ class MainScreenState extends State<MainScreen> {
       CategoryPaymentScreen(
         transactions: MainPaymentScreen.transactionsOf(_paymentKey),
         groupedIndexes: MainPaymentScreen.groupedIndexesOf(_paymentKey),
+        groups: MainPaymentScreen.groupsOf(_paymentKey),
+        currentMonth: MainPaymentScreen.currentMonthOf(_paymentKey),
       ),
     ];
     _startForegroundService();
@@ -133,6 +135,8 @@ class MainScreenState extends State<MainScreen> {
       screens[4] = CategoryPaymentScreen(
         transactions: MainPaymentScreen.transactionsOf(_paymentKey),
         groupedIndexes: MainPaymentScreen.groupedIndexesOf(_paymentKey),
+        groups: MainPaymentScreen.groupsOf(_paymentKey),
+        currentMonth: MainPaymentScreen.currentMonthOf(_paymentKey),
       );
     }
 

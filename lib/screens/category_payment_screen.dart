@@ -194,6 +194,36 @@ class _CategoryPaymentScreenState extends State<CategoryPaymentScreen> {
     }
   }
 
+  // ── 그룹 비율 분해: 카테고리 → 내 기여 금액 목록 반환 ──
+  // 반환: {'식비': 8000, '카페': 3200, ...}
+  Map<String, int> _groupCategoryContributions(TransactionGroup group) {
+    final expenses = group.items.where((tx) => !tx.isIncome).toList();
+    int totalExpense = 0;
+    int totalIncome = 0;
+    for (final tx in group.items) {
+      final raw = tx.amount.replaceAll(RegExp(r'[^0-9]'), '');
+      final val = int.tryParse(raw) ?? 0;
+      if (tx.isIncome) {
+        totalIncome += val;
+      } else {
+        totalExpense += val;
+      }
+    }
+    final myExpense = totalExpense - totalIncome;
+    if (myExpense <= 0 || totalExpense == 0) return {};
+
+    final result = <String, int>{};
+    for (final tx in expenses) {
+      final raw = tx.amount.replaceAll(RegExp(r'[^0-9]'), '');
+      final amt = int.tryParse(raw) ?? 0;
+      if (amt == 0) continue;
+      final myAmt = (amt / totalExpense * myExpense).round();
+      if (myAmt <= 0) continue;
+      result[tx.category] = (result[tx.category] ?? 0) + myAmt;
+    }
+    return result;
+  }
+
   // ── 카테고리 요약 계산 ──
   List<CategorySummary> get _categories {
     final Map<String, int> totals = {};
@@ -208,22 +238,11 @@ class _CategoryPaymentScreenState extends State<CategoryPaymentScreen> {
       totals[tx.category] = (totals[tx.category] ?? 0) + val;
     }
 
-    // 2) 각 그룹의 내 지출(총지출 - 수입)을 기타로 합산
+    // 2) 각 그룹의 내 지출을 비율로 쪼개 실제 카테고리에 합산
     for (final group in _groups) {
-      int groupExpense = 0;
-      int groupIncome = 0;
-      for (final tx in group.items) {
-        final raw = tx.amount.replaceAll(RegExp(r'[^0-9]'), '');
-        final val = int.tryParse(raw) ?? 0;
-        if (tx.isIncome) {
-          groupIncome += val;
-        } else {
-          groupExpense += val;
-        }
-      }
-      final myExpense = groupExpense - groupIncome;
-      if (myExpense > 0) {
-        totals['기타'] = (totals['기타'] ?? 0) + myExpense;
+      final contributions = _groupCategoryContributions(group);
+      for (final entry in contributions.entries) {
+        totals[entry.key] = (totals[entry.key] ?? 0) + entry.value;
       }
     }
 
@@ -440,26 +459,43 @@ class _CategoryPaymentScreenState extends State<CategoryPaymentScreen> {
   Widget _buildCategoryItem(CategorySummary cat, ThemeColors colors) {
     return GestureDetector(
       onTap: () {
-        if (cat.title == '기타') {
-          // 기타 = 그룹 내 지출 목록 표시
-          Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (_) => CategoryDetailScreen(
-                category: '기타 (그룹)',
-                transactions: const [],
-                groups: _groups,
-              ),
-            ),
-          );
-          return;
-        }
-
+        // 일반 거래 중 해당 카테고리 필터
         final filtered = _transactions.where((tx) {
           return !_groupedIndexes.contains(_transactions.indexOf(tx)) &&
               tx.category == cat.title &&
               !tx.isIncome;
         }).toList();
+
+        // 해당 카테고리에 기여하는 그룹 항목들을 개별 카드로 보여줄 데이터 생성
+        // groupExpandedItems: 해당 카테고리에 속하는 그룹 내 지출 항목 + 내 몹 금액
+        final groupExpandedItems = <Map<String, dynamic>>[];
+        for (final group in _groups) {
+          final contributions = _groupCategoryContributions(group);
+          if (!contributions.containsKey(cat.title)) continue;
+
+          // 지출 합계
+          int totalExpense = 0;
+          int totalIncome = 0;
+          for (final tx in group.items) {
+            final raw = tx.amount.replaceAll(RegExp(r'[^0-9]'), '');
+            final val = int.tryParse(raw) ?? 0;
+            if (tx.isIncome) totalIncome += val; else totalExpense += val;
+          }
+          final myExpense = totalExpense - totalIncome;
+          if (myExpense <= 0 || totalExpense == 0) continue;
+
+          // 해당 카테고리의 지출 항목만 필터
+          for (final tx in group.items) {
+            if (tx.isIncome) continue;
+            if (tx.category != cat.title) continue;
+            final raw = tx.amount.replaceAll(RegExp(r'[^0-9]'), '');
+            final amt = int.tryParse(raw) ?? 0;
+            if (amt == 0) continue;
+            final myAmt = (amt / totalExpense * myExpense).round();
+            if (myAmt <= 0) continue;
+            groupExpandedItems.add({'tx': tx, 'myAmount': myAmt});
+          }
+        }
 
         Navigator.push(
           context,
@@ -467,6 +503,7 @@ class _CategoryPaymentScreenState extends State<CategoryPaymentScreen> {
             builder: (_) => CategoryDetailScreen(
               category: cat.title,
               transactions: filtered,
+              groupExpandedItems: groupExpandedItems,
             ),
           ),
         );

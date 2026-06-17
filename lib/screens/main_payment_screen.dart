@@ -187,6 +187,35 @@ class _MainPaymentScreenState extends State<MainPaymentScreen>
 
   final List<TransactionItem> _transactions = [];
 
+  // ✅ 그룹 비율 분해: 카테고리 → 내 기여 금액 맵 반환
+  Map<String, int> _groupCategoryContributions(TransactionGroup group) {
+    final expenses = group.items.where((tx) => !tx.isIncome).toList();
+    int totalExpense = 0;
+    int totalIncome = 0;
+    for (final tx in group.items) {
+      final raw = tx.amount.replaceAll(RegExp(r'[^0-9]'), '');
+      final val = int.tryParse(raw) ?? 0;
+      if (tx.isIncome) {
+        totalIncome += val;
+      } else {
+        totalExpense += val;
+      }
+    }
+    final myExpense = totalExpense - totalIncome;
+    if (myExpense <= 0 || totalExpense == 0) return {};
+
+    final result = <String, int>{};
+    for (final tx in expenses) {
+      final raw = tx.amount.replaceAll(RegExp(r'[^0-9]'), '');
+      final amt = int.tryParse(raw) ?? 0;
+      if (amt == 0) continue;
+      final myAmt = (amt / totalExpense * myExpense).round();
+      if (myAmt <= 0) continue;
+      result[tx.category] = (result[tx.category] ?? 0) + myAmt;
+    }
+    return result;
+  }
+
   // ✅ 활성 거래(그룹화 제외)에서 카테고리 요약을 동적으로 계산
   List<CategorySummary> get _categories {
     final Map<String, int> totals = {};
@@ -201,22 +230,11 @@ class _MainPaymentScreenState extends State<MainPaymentScreen>
       totals[tx.category] = (totals[tx.category] ?? 0) + val;
     }
 
-    // 2) 각 그룹의 내 지출(총지출 - 수입)을 기타로 합산
+    // 2) 각 그룹의 내 지출을 비율로 쪼개 실제 카테고리에 합산
     for (final group in _groups) {
-      int groupExpense = 0;
-      int groupIncome = 0;
-      for (final tx in group.items) {
-        final raw = tx.amount.replaceAll(RegExp(r'[^0-9]'), '');
-        final val = int.tryParse(raw) ?? 0;
-        if (tx.isIncome) {
-          groupIncome += val;
-        } else {
-          groupExpense += val;
-        }
-      }
-      final myExpense = groupExpense - groupIncome;
-      if (myExpense > 0) {
-        totals['기타'] = (totals['기타'] ?? 0) + myExpense;
+      final contributions = _groupCategoryContributions(group);
+      for (final entry in contributions.entries) {
+        totals[entry.key] = (totals[entry.key] ?? 0) + entry.value;
       }
     }
 

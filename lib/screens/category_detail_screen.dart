@@ -2,75 +2,66 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../app_colors.dart';
-import '../services/api_service.dart';
 import 'individual_payment_screen.dart';
 import 'main_payment_screen.dart';
-import 'group_payment_screen.dart';
 
-class CategoryDetailScreen extends StatefulWidget {
+class CategoryDetailScreen extends StatelessWidget {
   final String category;
   final List<TransactionItem> transactions;
-  final List<TransactionGroup> groups;
+  // 그룹에서 비율 계산된 항목들: {'tx': TransactionItem, 'myAmount': int}
+  final List<Map<String, dynamic>> groupExpandedItems;
 
   const CategoryDetailScreen({
     super.key,
     required this.category,
     required this.transactions,
-    this.groups = const [],
+    this.groupExpandedItems = const [],
   });
 
-  @override
-  State<CategoryDetailScreen> createState() => _CategoryDetailScreenState();
-}
+  String _fmt(int amount) => amount.toString().replaceAllMapped(
+        RegExp(r'(\d)(?=(\d{3})+(?!\d))'),
+        (m) => '${m[1]},',
+      );
 
-class _CategoryDetailScreenState extends State<CategoryDetailScreen> {
-  late List<TransactionGroup> _groups;
-
-  @override
-  void initState() {
-    super.initState();
-    _groups = List.from(widget.groups);
-  }
-
-  // 일반 거래 합계 + 그룹 내 지출 합계
-  int get totalAmount {
+  int get _totalAmount {
     int total = 0;
-    for (final tx in widget.transactions) {
+    for (final tx in transactions) {
       final raw = tx.amount.replaceAll(RegExp(r'[^0-9]'), '');
       total += int.tryParse(raw) ?? 0;
     }
-    for (final group in _groups) {
-      int groupExpense = 0;
-      int groupIncome = 0;
-      for (final tx in group.items) {
-        final raw = tx.amount.replaceAll(RegExp(r'[^0-9]'), '');
-        final val = int.tryParse(raw) ?? 0;
-        if (tx.isIncome) {
-          groupIncome += val;
-        } else {
-          groupExpense += val;
-        }
-      }
-      final myExpense = groupExpense - groupIncome;
-      if (myExpense > 0) total += myExpense;
+    for (final item in groupExpandedItems) {
+      total += item['myAmount'] as int;
     }
     return total;
   }
 
-  String get formattedTotal {
-    final formatted = totalAmount.toString().replaceAllMapped(
-      RegExp(r'(\d)(?=(\d{3})+(?!\d))'),
-      (m) => '${m[1]},',
-    );
-    return '$formatted 원';
-  }
-
-  // 총 항목 수 (일반 거래 + 그룹 수)
-  int get itemCount => widget.transactions.length + _groups.length;
+  int get _itemCount => transactions.length + groupExpandedItems.length;
 
   @override
   Widget build(BuildContext context) {
     final colors = context.watch<ThemeProvider>().colors;
+
+    // 일반 항목 + 그룹 비율 항목을 합쳐서 최신순 정렬
+    final allItems = <Map<String, dynamic>>[];
+    for (final tx in transactions) {
+      allItems.add({
+        'type': 'normal',
+        'tx': tx,
+        'sortKey': tx.createdAt ?? DateTime(0),
+      });
+    }
+    for (final item in groupExpandedItems) {
+      final tx = item['tx'] as TransactionItem;
+      allItems.add({
+        'type': 'group',
+        'tx': tx,
+        'myAmount': item['myAmount'],
+        'sortKey': tx.createdAt ?? DateTime(0),
+      });
+    }
+    allItems.sort(
+      (a, b) => (b['sortKey'] as DateTime).compareTo(a['sortKey'] as DateTime),
+    );
 
     return Scaffold(
       backgroundColor: colors.background,
@@ -109,7 +100,7 @@ class _CategoryDetailScreenState extends State<CategoryDetailScreen> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        widget.category,
+                        category,
                         style: TextStyle(
                           fontSize: 20,
                           fontWeight: FontWeight.bold,
@@ -118,7 +109,7 @@ class _CategoryDetailScreenState extends State<CategoryDetailScreen> {
                       ),
                       const SizedBox(height: 8),
                       Text(
-                        formattedTotal,
+                        '${_fmt(_totalAmount)} 원',
                         style: TextStyle(
                           fontSize: 28,
                           fontWeight: FontWeight.bold,
@@ -127,7 +118,7 @@ class _CategoryDetailScreenState extends State<CategoryDetailScreen> {
                       ),
                       const SizedBox(height: 6),
                       Text(
-                        '횟수 $itemCount회',
+                        '횟수 $_itemCount회',
                         style: TextStyle(fontSize: 14, color: colors.subText),
                       ),
                     ],
@@ -143,150 +134,29 @@ class _CategoryDetailScreenState extends State<CategoryDetailScreen> {
 
           const SizedBox(height: 20),
 
-          // 그룹 카드 목록 (기타 카테고리)
-          if (_groups.isNotEmpty) ..._buildGroupList(context, colors),
-
-          // 일반 거래 목록
-          ..._buildTransactionList(context, colors),
+          // 날짜별 항목 목록 (일반 + 그룹 비율 항목 통합)
+          ..._buildList(context, colors, allItems),
         ],
       ),
     );
   }
 
-  // 그룹 카드 목록
-  List<Widget> _buildGroupList(BuildContext context, ThemeColors colors) {
+  List<Widget> _buildList(
+    BuildContext context,
+    ThemeColors colors,
+    List<Map<String, dynamic>> items,
+  ) {
     final widgets = <Widget>[];
-
-    if (_groups.isNotEmpty) {
-      widgets.add(
-        Padding(
-          padding: const EdgeInsets.only(bottom: 8),
-          child: Text(
-            '그룹',
-            style: TextStyle(
-              fontWeight: FontWeight.bold,
-              color: colors.primaryText,
-            ),
-          ),
-        ),
-      );
-    }
-
-    for (int gi = 0; gi < _groups.length; gi++) {
-      final group = _groups[gi];
-      // 그룹 내 지출 - 수입 = 내 지출
-      int groupExpense = 0;
-      int groupIncome = 0;
-      for (final tx in group.items) {
-        final raw = tx.amount.replaceAll(RegExp(r'[^0-9]'), '');
-        final val = int.tryParse(raw) ?? 0;
-        if (tx.isIncome) {
-          groupIncome += val;
-        } else {
-          groupExpense += val;
-        }
-      }
-      final myExpense = groupExpense - groupIncome;
-      final absStr = myExpense.abs().toString().replaceAllMapped(
-        RegExp(r'(\d)(?=(\d{3})+(?!\d))'),
-        (m) => '${m[1]},',
-      );
-
-      widgets.add(
-        GestureDetector(
-          onTap: () {
-            Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (_) => GroupPaymentScreen(
-                  group: group,
-                  allTransactions: group.items,
-                  groupedIndexes: {},
-                ),
-              ),
-            ).then((_) async {
-              // GroupPaymentScreen에서 이름 변경 후 복귀 시 백엔드에서 최신 번들 목록을 다시 가져와 이름 갱신
-              final bundles = await ApiService.getLedgerBundles();
-              if (!mounted) return;
-              final updatedGroups = List<TransactionGroup>.from(_groups);
-              for (int i = 0; i < updatedGroups.length; i++) {
-                final bid = updatedGroups[i].bundleId;
-                if (bid == null) continue;
-                final meta = bundles.firstWhere(
-                  (b) => b['id']?.toString() == bid,
-                  orElse: () => {},
-                );
-                final newName = meta['name']?.toString();
-                if (newName != null && newName.isNotEmpty && newName != updatedGroups[i].name) {
-                  updatedGroups[i] = TransactionGroup(
-                    name: newName,
-                    items: updatedGroups[i].items,
-                    bundleId: updatedGroups[i].bundleId,
-                    bundleDate: updatedGroups[i].bundleDate,
-                  );
-                }
-              }
-              setState(() => _groups = updatedGroups);
-            });
-          },
-          child: Container(
-            margin: const EdgeInsets.only(bottom: 12),
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-            decoration: BoxDecoration(
-              color: colors.cardBackground,
-              borderRadius: BorderRadius.circular(18),
-            ),
-            child: Row(
-              children: [
-                Container(
-                  width: 42,
-                  height: 42,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: colors.background,
-                  ),
-                  child: Icon(Icons.group, color: colors.primaryText),
-                ),
-                const SizedBox(width: 14),
-                Expanded(
-                  child: Text(
-                    group.name,
-                    style: TextStyle(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 15,
-                      color: colors.primaryText,
-                    ),
-                  ),
-                ),
-                Text(
-                  '-$absStr원',
-                  style: const TextStyle(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 15,
-                    color: Colors.red,
-                  ),
-                ),
-                const SizedBox(width: 4),
-                Icon(Icons.chevron_right, color: colors.subText, size: 18),
-              ],
-            ),
-          ),
-        ),
-      );
-    }
-
-    return widgets;
-  }
-
-  // 일반 거래 목록
-  List<Widget> _buildTransactionList(BuildContext context, ThemeColors colors) {
-    final widgets = <Widget>[];
-    if (widget.transactions.isEmpty) return widgets;
-
     String? lastDate;
 
-    for (final tx in widget.transactions) {
+    for (final item in items) {
+      final tx = item['tx'] as TransactionItem;
+      final isGroupItem = item['type'] == 'group';
+      final myAmount = isGroupItem ? item['myAmount'] as int : null;
+
+      // 날짜 헤더
       if (tx.date != lastDate) {
+        if (lastDate != null) widgets.add(const SizedBox(height: 4));
         widgets.add(
           Padding(
             padding: const EdgeInsets.only(top: 10, bottom: 8),
@@ -304,14 +174,12 @@ class _CategoryDetailScreenState extends State<CategoryDetailScreen> {
 
       widgets.add(
         GestureDetector(
-          onTap: () {
-            Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (_) => IndividualPaymentScreen(transaction: tx),
-              ),
-            );
-          },
+          onTap: () => Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => IndividualPaymentScreen(transaction: tx),
+            ),
+          ),
           child: Container(
             margin: const EdgeInsets.only(bottom: 12),
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
@@ -341,12 +209,15 @@ class _CategoryDetailScreenState extends State<CategoryDetailScreen> {
                     ),
                   ),
                 ),
+                // 그룹 항목: 비율 계산된 내 몫 / 일반 항목: 원래 금액
                 Text(
-                  tx.amount,
-                  style: TextStyle(
+                  isGroupItem
+                      ? '-${_fmt(myAmount!)} 원'
+                      : tx.amount,
+                  style: const TextStyle(
                     fontWeight: FontWeight.bold,
                     fontSize: 15,
-                    color: tx.isIncome ? Colors.blue : Colors.red,
+                    color: Colors.red,
                   ),
                 ),
               ],
